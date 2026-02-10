@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import JoinClass from './pages/student/JoinClass';
@@ -14,9 +14,10 @@ import { useTranslation } from 'react-i18next';
 const ProtectedRoute = ({ children, allowedRole }) => {
   const { t } = useTranslation();
   const { user, userData, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) return <div>{t('common.loading')}</div>;
-  if (!user) return <Navigate to="/login" />;
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   if (allowedRole && userData?.role !== allowedRole) {
     return <Navigate to={userData?.role === 'teacher' ? '/teacher' : '/student'} />;
   }
