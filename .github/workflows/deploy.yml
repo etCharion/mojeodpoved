@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      - feature/peergrade-app-2750039694708950608
+  workflow_dispatch:
 
 permissions:
   contents: read
