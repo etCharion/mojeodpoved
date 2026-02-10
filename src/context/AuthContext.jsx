@@ -22,9 +22,12 @@ export const AuthProvider = ({ children }) => {
         if (userDoc.exists()) {
           setUserData(userDoc.data());
         } else {
-          // For demo purposes, if email contains 'teacher' or 'admin', make them a teacher.
-          // In a real app, this would be handled via invitation or admin panel.
-          const isTeacher = user.email.toLowerCase().includes('teacher') || user.email.toLowerCase().includes('admin');
+          // For demo purposes, if email contains 'teacher' or 'admin', or matches the primary admin email, make them a teacher.
+          const adminEmail = 'gunka.daniel@gmail.com';
+          const isTeacher =
+            user.email.toLowerCase() === adminEmail.toLowerCase() ||
+            user.email.toLowerCase().includes('teacher') ||
+            user.email.toLowerCase().includes('admin');
 
           const newData = {
             uid: user.uid,
