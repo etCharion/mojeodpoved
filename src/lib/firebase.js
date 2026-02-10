@@ -3,13 +3,12 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  // These should be replaced with actual config from Firebase Console
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "PLACEHOLDER",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "PLACEHOLDER",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "PLACEHOLDER",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "PLACEHOLDER",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "PLACEHOLDER",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "PLACEHOLDER"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyA_FVskMh2amViu_Kp4eZ9mF7P2D7llECQ",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "mojeodpoved.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "mojeodpoved",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "mojeodpoved.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "181568006316",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:181568006316:web:625c56b2f4640d8d3d1709"
 };
 
 const app = initializeApp(firebaseConfig);
