@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isTeacher() {
+      return isSignedIn() && getUserData().role == 'teacher';
+    }
+
+    function isStudent() {
+      return isSignedIn() && getUserData().role == 'student';
+    }
+
+    // Users
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if request.auth.uid == userId;
+    }
+
+    // Classes
+    match /classes/{classId} {
+      allow read: if isSignedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        request.auth.token.email in resource.data.studentEmails ||
+        request.auth.uid in resource.data.studentUids
+      );
+      allow create: if isTeacher();
+      allow update, delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+    }
+
+    // Assignments
+    match /assignments/{assignmentId} {
+      allow read: if isSignedIn(); // Simplified, should check class access
+      allow write: if isTeacher();
+    }
+
+    // Submissions
+    match /submissions/{submissionId} {
+      allow read: if isSignedIn() && (
+        isTeacher() ||
+        resource.data.studentId == request.auth.uid ||
+        // Allow reading if assigned as a reviewer
+        exists(/databases/$(database)/documents/reviews/$(request.auth.uid + '_' + submissionId))
+      );
+      allow create: if isStudent();
+      allow update: if isSignedIn() && (isTeacher() || resource.data.studentId == request.auth.uid);
+    }
+
+    // Reviews
+    // Using a composite ID for reviews: reviewerId + "_" + submissionId
+    match /reviews/{reviewId} {
+      allow read: if isSignedIn() && (
+        isTeacher() ||
+        resource.data.reviewerId == request.auth.uid ||
+        resource.data.authorId == request.auth.uid
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        isTeacher() ||
+        resource.data.reviewerId == request.auth.uid ||
+        resource.data.authorId == request.auth.uid
+      );
+    }
+  }
+}
