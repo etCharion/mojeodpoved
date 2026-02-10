@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { db } from '../../lib/firebase';
 import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { Plus, Trash2, ArrowLeft, Save } from 'lucide-react';
+import Breadcrumbs from '../../components/Breadcrumbs';
 import { useTranslation } from 'react-i18next';
 
 export default function AssignmentBuilder() {
@@ -128,7 +129,10 @@ export default function AssignmentBuilder() {
         <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full">
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <h1 className="text-3xl font-bold">{assignmentId ? t('assignment.edit_assignment') : t('class.new_assignment')}</h1>
+        <div>
+          <h1 className="text-3xl font-bold">{assignmentId ? t('assignment.edit_assignment') : t('class.new_assignment')}</h1>
+          <Breadcrumbs />
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
