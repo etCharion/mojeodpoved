@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
 import { collection, addDoc, doc, setDoc, updateDoc, serverTimestamp, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
 import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, RefreshCw } from 'lucide-react';
+import Breadcrumbs from '../../components/Breadcrumbs';
 import { runDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
@@ -91,6 +92,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
         <div className="text-center">
           <h1 className="text-3xl font-bold">{assignment.title}</h1>
           <p className="text-gray-500 mt-2">{assignment.description}</p>
+          <div className="flex justify-center mt-2">
+            <Breadcrumbs />
+          </div>
         </div>
 
         {assignment.allowSubmissions !== false ? (
@@ -128,7 +132,10 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     return (
       <div className="max-w-4xl mx-auto space-y-8 pb-20">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">{t('assignment.reviewing_peer')}</h1>
+          <div>
+            <h1 className="text-2xl font-bold">{t('assignment.reviewing_peer')}</h1>
+            <Breadcrumbs />
+          </div>
           <button onClick={() => setActiveReview(null)} className="text-gray-500 hover:underline">{t('common.cancel')}</button>
         </div>
 
@@ -218,6 +225,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
         <div className="relative z-10">
           <h1 className="text-3xl font-bold">{assignment.title}</h1>
           <p className="mt-2 text-indigo-100 max-w-xl">{assignment.description}</p>
+          <div className="mt-2">
+            <Breadcrumbs />
+          </div>
           <div className="mt-6 flex items-center gap-4">
             <span className="flex items-center gap-1.5 bg-white/20 px-3 py-1 rounded-full text-sm">
               <CheckCircle className="w-4 h-4" />

@@ -3,8 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
 import { doc, onSnapshot, collection, query, where, getDocs, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw } from 'lucide-react';
+import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send } from 'lucide-react';
 import StudentAssignmentView from '../student/StudentAssignmentView';
+import Breadcrumbs from '../../components/Breadcrumbs';
 import { runDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
@@ -72,57 +73,50 @@ export default function AssignmentDetails() {
           </div>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">{assignment.title}</h1>
-            <p className="text-gray-500">{t('assignment.monitoring')}</p>
+            <p className="text-gray-500 mb-1">{t('assignment.monitoring')}</p>
+            <Breadcrumbs />
           </div>
         </div>
-        <div className="flex flex-col gap-2 items-end">
-          <div className="flex gap-2">
-            <button
-              onClick={() => runDistribution(assignmentId)}
-              className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
-              title={t('assignment.redistribute')}
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>{t('assignment.redistribute')}</span>
-            </button>
-            <Link
-              to={`/teacher/assignment/edit/${assignmentId}`}
-              className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <Edit className="w-4 h-4" />
-              <span>{t('assignment.edit_assignment')}</span>
-            </Link>
-          </div>
+        <div className="flex gap-2 flex-wrap justify-end">
+          <button
+            onClick={() => runDistribution(assignmentId)}
+            className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+            title={t('assignment.redistribute')}
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>{t('assignment.redistribute')}</span>
+          </button>
+          <Link
+            to={`/teacher/assignment/edit/${assignmentId}`}
+            className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Edit className="w-4 h-4" />
+            <span>{t('assignment.edit_assignment')}</span>
+          </Link>
 
-          <div className="flex gap-4 p-2 bg-gray-50 rounded-lg border text-xs font-medium">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={assignment.isVisible !== false}
-                onChange={(e) => toggleField('isVisible', e.target.checked)}
-                className="w-3 h-3 text-indigo-600 rounded"
-              />
-              {t('assignment.visibility')}
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={assignment.allowSubmissions !== false}
-                onChange={(e) => toggleField('allowSubmissions', e.target.checked)}
-                className="w-3 h-3 text-indigo-600 rounded"
-              />
-              {t('assignment.allow_submissions')}
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={assignment.allowReviews !== false}
-                onChange={(e) => toggleField('allowReviews', e.target.checked)}
-                className="w-3 h-3 text-indigo-600 rounded"
-              />
-              {t('assignment.allow_reviews')}
-            </label>
-          </div>
+          <button
+              onClick={() => toggleField('isVisible', assignment.isVisible === false)}
+              className={`flex items-center gap-2 border px-4 py-2 rounded-lg transition-colors text-sm font-medium ${assignment.isVisible !== false ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'}`}
+          >
+              {assignment.isVisible !== false ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              <span>{t('assignment.visibility')}</span>
+          </button>
+
+          <button
+              onClick={() => toggleField('allowSubmissions', assignment.allowSubmissions === false)}
+              className={`flex items-center gap-2 border px-4 py-2 rounded-lg transition-colors text-sm font-medium ${assignment.allowSubmissions !== false ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'}`}
+          >
+              {assignment.allowSubmissions !== false ? <Send className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+              <span>{t('assignment.allow_submissions')}</span>
+          </button>
+
+          <button
+              onClick={() => toggleField('allowReviews', assignment.allowReviews === false)}
+              className={`flex items-center gap-2 border px-4 py-2 rounded-lg transition-colors text-sm font-medium ${assignment.allowReviews !== false ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'}`}
+          >
+              {assignment.allowReviews !== false ? <MessageSquare className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+              <span>{t('assignment.allow_reviews')}</span>
+          </button>
         </div>
       </div>
 

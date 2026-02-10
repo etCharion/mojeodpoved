@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
 import { doc, onSnapshot, collection, query, where, updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Users, BookOpen, Plus, Check, X, Clipboard, ExternalLink } from 'lucide-react';
+import Breadcrumbs from '../../components/Breadcrumbs';
 import { useTranslation } from 'react-i18next';
 
 export default function ClassDetails() {
@@ -75,7 +76,8 @@ export default function ClassDetails() {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">{classInfo.name}</h1>
-          <p className="text-gray-500">{t('class.management')}</p>
+          <p className="text-gray-500 mb-1">{t('class.management')}</p>
+          <Breadcrumbs />
         </div>
         {isTeacher && (
           <Link

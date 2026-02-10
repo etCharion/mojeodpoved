@@ -58,7 +58,7 @@ export default function Breadcrumbs() {
   const isEditAssignment = location.pathname.includes('/assignment/edit');
 
   return (
-    <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6 overflow-x-auto whitespace-nowrap pb-2">
+    <nav className="flex items-center gap-2 text-sm text-gray-500 mt-1 overflow-x-auto whitespace-nowrap">
       <Link
         to={baseRoute}
         className="flex items-center gap-1 hover:text-indigo-600 transition-colors"
