@@ -9,11 +9,14 @@ import ClassDetails from './pages/shared/ClassDetails';
 import AssignmentDetails from './pages/shared/AssignmentDetails';
 import AssignmentBuilder from './pages/teacher/AssignmentBuilder';
 import Navbar from './components/Navbar';
+import Breadcrumbs from './components/Breadcrumbs';
+import { useTranslation } from 'react-i18next';
 
 const ProtectedRoute = ({ children, allowedRole }) => {
+  const { t } = useTranslation();
   const { user, userData, loading } = useAuth();
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <div>{t('common.loading')}</div>;
   if (!user) return <Navigate to="/login" />;
   if (allowedRole && userData?.role !== allowedRole) {
     return <Navigate to={userData?.role === 'teacher' ? '/teacher' : '/student'} />;
@@ -23,6 +26,7 @@ const ProtectedRoute = ({ children, allowedRole }) => {
     <>
       <Navbar />
       <div className="container mx-auto px-4 py-8">
+        <Breadcrumbs />
         {children}
       </div>
     </>
