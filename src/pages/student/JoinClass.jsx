@@ -4,8 +4,10 @@ import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
 import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export default function JoinClass() {
+  const { t } = useTranslation();
   const { classId } = useParams();
   const { user, userData } = useAuth();
   const navigate = useNavigate();
@@ -71,7 +73,7 @@ export default function JoinClass() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
-        <p className="mt-4 text-gray-600 font-medium">Joining class...</p>
+        <p className="mt-4 text-gray-600 font-medium">{t('join.joining')}</p>
       </div>
     );
   }
@@ -81,13 +83,13 @@ export default function JoinClass() {
       {status === 'approved' && (
         <>
           <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900">Successfully Joined!</h1>
-          <p className="text-gray-600 mt-2">You are now enrolled in <strong>{className}</strong>.</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('join.success_title')}</h1>
+          <p className="text-gray-600 mt-2">{t('join.success_desc', { name: className })}</p>
           <button
             onClick={() => navigate(`/student/class/${classId}`)}
             className="w-full mt-6 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700"
           >
-            Go to Class
+            {t('join.go_to_class')}
           </button>
         </>
       )}
@@ -95,15 +97,15 @@ export default function JoinClass() {
       {status === 'pending' && (
         <>
           <Loader2 className="w-16 h-16 text-orange-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900">Request Sent</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t('join.request_sent')}</h1>
           <p className="text-gray-600 mt-2">
-            Your request to join <strong>{className}</strong> is pending teacher approval.
+            {t('join.request_desc', { name: className })}
           </p>
           <button
             onClick={() => navigate('/student')}
             className="w-full mt-6 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200"
           >
-            Back to Dashboard
+            {t('join.back_to_dashboard')}
           </button>
         </>
       )}
@@ -111,13 +113,13 @@ export default function JoinClass() {
       {status === 'error' && (
         <>
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900">Oops!</h1>
-          <p className="text-gray-600 mt-2">We couldn't find the class or something went wrong.</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('join.error_title')}</h1>
+          <p className="text-gray-600 mt-2">{t('join.error_desc')}</p>
           <button
             onClick={() => navigate('/student')}
             className="w-full mt-6 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200"
           >
-            Back to Dashboard
+            {t('join.back_to_dashboard')}
           </button>
         </>
       )}

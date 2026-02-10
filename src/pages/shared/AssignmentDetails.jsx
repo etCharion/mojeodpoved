@@ -6,8 +6,10 @@ import { doc, onSnapshot, collection, query, where, getDocs, updateDoc, deleteDo
 import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw } from 'lucide-react';
 import StudentAssignmentView from '../student/StudentAssignmentView';
 import { runDistribution } from '../../lib/logic';
+import { useTranslation } from 'react-i18next';
 
 export default function AssignmentDetails() {
+  const { t } = useTranslation();
   const { assignmentId } = useParams();
   const { userData } = useAuth();
   const [assignment, setAssignment] = useState(null);
@@ -41,12 +43,19 @@ export default function AssignmentDetails() {
   }, [assignmentId]);
 
   const handleDeleteReview = async (reviewId) => {
-    if (!window.confirm('Are you sure you want to delete this review?')) return;
+    if (!window.confirm(t('assignment.delete_review_confirm'))) return;
     await deleteDoc(doc(db, 'reviews', reviewId));
   };
 
-  if (loading) return <div>Loading...</div>;
-  if (!assignment) return <div>Assignment not found</div>;
+  const toggleField = async (field, value) => {
+    await updateDoc(doc(db, 'assignments', assignmentId), {
+      [field]: value,
+      updatedAt: serverTimestamp()
+    });
+  };
+
+  if (loading) return <div>{t('common.loading')}</div>;
+  if (!assignment) return <div>{t('common.unknown').replace('Unknown', 'Assignment not found')}</div>;
 
   const isTeacher = userData?.role === 'teacher';
 
@@ -63,41 +72,73 @@ export default function AssignmentDetails() {
           </div>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">{assignment.title}</h1>
-            <p className="text-gray-500">Teacher Monitoring Dashboard</p>
+            <p className="text-gray-500">{t('assignment.monitoring')}</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => runDistribution(assignmentId)}
-            className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
-            title="Recalculate and distribute reviews"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>Redistribute</span>
-          </button>
-          <Link
-            to={`/teacher/assignment/edit/${assignmentId}`}
-            className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <Edit className="w-4 h-4" />
-            <span>Edit Assignment</span>
-          </Link>
+        <div className="flex flex-col gap-2 items-end">
+          <div className="flex gap-2">
+            <button
+              onClick={() => runDistribution(assignmentId)}
+              className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+              title={t('assignment.redistribute')}
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>{t('assignment.redistribute')}</span>
+            </button>
+            <Link
+              to={`/teacher/assignment/edit/${assignmentId}`}
+              className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <Edit className="w-4 h-4" />
+              <span>{t('assignment.edit_assignment')}</span>
+            </Link>
+          </div>
+
+          <div className="flex gap-4 p-2 bg-gray-50 rounded-lg border text-xs font-medium">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={assignment.isVisible !== false}
+                onChange={(e) => toggleField('isVisible', e.target.checked)}
+                className="w-3 h-3 text-indigo-600 rounded"
+              />
+              {t('assignment.visibility')}
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={assignment.allowSubmissions !== false}
+                onChange={(e) => toggleField('allowSubmissions', e.target.checked)}
+                className="w-3 h-3 text-indigo-600 rounded"
+              />
+              {t('assignment.allow_submissions')}
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={assignment.allowReviews !== false}
+                onChange={(e) => toggleField('allowReviews', e.target.checked)}
+                className="w-3 h-3 text-indigo-600 rounded"
+              />
+              {t('assignment.allow_reviews')}
+            </label>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-xl border">
-          <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Submissions</p>
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t('assignment.submissions')}</p>
           <p className="text-4xl font-bold mt-2">{submissions.length}</p>
-          <p className="text-sm text-gray-400 mt-1">Goal: {assignment.review_start_threshold} to start</p>
+          <p className="text-sm text-gray-400 mt-1">{t('assignment.goal', { count: assignment.review_start_threshold })}</p>
         </div>
         <div className="bg-white p-6 rounded-xl border">
-          <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Reviews Completed</p>
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t('assignment.reviews_completed')}</p>
           <p className="text-4xl font-bold mt-2">{reviews.filter(r => r.status === 'completed').length}</p>
-          <p className="text-sm text-gray-400 mt-1">Total assigned: {reviews.length}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('assignment.total_assigned', { count: reviews.length })}</p>
         </div>
         <div className="bg-white p-6 rounded-xl border">
-          <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Average Score</p>
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t('assignment.average_score')}</p>
           <p className="text-4xl font-bold mt-2">
             {(reviews.reduce((acc, r) => {
               const rValues = Object.values(r.ratings || {});
@@ -105,7 +146,7 @@ export default function AssignmentDetails() {
               return acc + (rValues.reduce((a, b) => a + b, 0) / rValues.length);
             }, 0) / (reviews.filter(r => r.status === 'completed').length || 1)).toFixed(1)}
           </p>
-          <p className="text-sm text-gray-400 mt-1">Across all criteria</p>
+          <p className="text-sm text-gray-400 mt-1">{t('assignment.across_criteria')}</p>
         </div>
       </div>
 
@@ -114,17 +155,17 @@ export default function AssignmentDetails() {
         <div className="p-6 border-b bg-gray-50">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Users className="w-5 h-5" />
-            Student Submissions
+            {t('assignment.student_submissions')}
           </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="bg-gray-50 text-gray-500 text-xs font-bold uppercase tracking-wider">
-                <th className="px-6 py-3 border-b">Student</th>
-                <th className="px-6 py-3 border-b">Content</th>
-                <th className="px-6 py-3 border-b">Reviews Received</th>
-                <th className="px-6 py-3 border-b">Status</th>
+                <th className="px-6 py-3 border-b">{t('assignment.student')}</th>
+                <th className="px-6 py-3 border-b">{t('assignment.content')}</th>
+                <th className="px-6 py-3 border-b">{t('assignment.reviews_received')}</th>
+                <th className="px-6 py-3 border-b">{t('common.status')}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -154,14 +195,14 @@ export default function AssignmentDetails() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">Submitted</span>
+                      <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">{t('assignment.work_submitted')}</span>
                     </td>
                   </tr>
                 );
               })}
               {submissions.length === 0 && (
                 <tr>
-                  <td colSpan="4" className="px-6 py-12 text-center text-gray-400">No submissions yet</td>
+                  <td colSpan="4" className="px-6 py-12 text-center text-gray-400">{t('assignment.no_submissions')}</td>
                 </tr>
               )}
             </tbody>
@@ -174,7 +215,7 @@ export default function AssignmentDetails() {
         <div className="p-6 border-b bg-gray-50">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Star className="w-5 h-5 text-yellow-500" />
-            All Reviews
+            {t('assignment.all_reviews')}
           </h2>
         </div>
         <div className="divide-y">
@@ -182,8 +223,8 @@ export default function AssignmentDetails() {
             <div key={review.id} className="p-6 hover:bg-gray-50 transition-colors">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <p className="text-sm font-bold text-indigo-600">Review by {review.reviewerName}</p>
-                  <p className="text-xs text-gray-400">Target: {submissions.find(s => s.id === review.submissionId)?.studentName || 'Unknown'}</p>
+                  <p className="text-sm font-bold text-indigo-600">{t('assignment.review_by', { name: review.reviewerName })}</p>
+                  <p className="text-xs text-gray-400">{t('assignment.target', { name: submissions.find(s => s.id === review.submissionId)?.studentName || t('common.unknown') })}</p>
                 </div>
                 <button
                   onClick={() => handleDeleteReview(review.id)}
@@ -195,7 +236,7 @@ export default function AssignmentDetails() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-tight">Ratings</p>
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-tight">{t('assignment.ratings')}</p>
                   {Object.entries(review.ratings || {}).map(([id, val]) => {
                     const criterion = assignment.rubric.find(r => r.id === id);
                     return (
@@ -209,14 +250,14 @@ export default function AssignmentDetails() {
                   })}
                 </div>
                 <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-tight">Feedback</p>
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-tight">{t('assignment.feedback')}</p>
                   <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-700 border italic">
                     {review.feedback}
                   </div>
                   {review.agreement?.status && (
                     <div className="mt-2 flex items-center gap-2 text-xs">
                       <span className={`px-2 py-0.5 rounded font-bold uppercase ${review.agreement.status === 'agree' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {review.agreement.status}D BY AUTHOR
+                        {review.agreement.status === 'agree' ? t('assignment.agreed_by_author') : t('assignment.disagreed_by_author')}
                       </span>
                       {review.agreement.note && <span className="text-gray-500">— {review.agreement.note}</span>}
                     </div>
@@ -226,7 +267,7 @@ export default function AssignmentDetails() {
             </div>
           ))}
           {reviews.filter(r => r.status === 'completed').length === 0 && (
-            <div className="p-12 text-center text-gray-400 italic">No reviews completed yet</div>
+            <div className="p-12 text-center text-gray-400 italic">{t('assignment.no_reviews')}</div>
           )}
         </div>
       </section>

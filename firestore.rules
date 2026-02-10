@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Helper functions
-    function isSignedIn() {
+    function isAuthenticated() {
       return request.auth != null;
     }
 
@@ -12,62 +12,85 @@ service cloud.firestore {
     }
 
     function isTeacher() {
-      return isSignedIn() && getUserData().role == 'teacher';
+      return isAuthenticated() && getUserData().role == 'teacher';
     }
 
     function isStudent() {
-      return isSignedIn() && getUserData().role == 'student';
+      return isAuthenticated() && getUserData().role == 'student';
     }
 
-    // Users
+    // User profiles
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if request.auth.uid == userId;
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isTeacher());
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && request.auth.uid == userId;
     }
 
     // Classes
     match /classes/{classId} {
-      allow read: if isSignedIn() && (
+      allow read: if isAuthenticated() && (
         resource.data.teacherId == request.auth.uid ||
-        request.auth.token.email in resource.data.studentEmails ||
-        request.auth.uid in resource.data.studentUids
+        request.auth.uid in resource.data.studentUids ||
+        request.auth.token.email.lower() in resource.data.studentEmails ||
+        resource.data.pendingStudents.status == "pending" // Simplified check for pending
+      );
+      // Students can update classes to join (pendingStudents array)
+      allow update: if isAuthenticated() && (
+        resource.data.teacherId == request.auth.uid ||
+        (isStudent() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingStudents', 'studentUids']))
       );
       allow create: if isTeacher();
-      allow update, delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.teacherId == request.auth.uid;
     }
 
     // Assignments
     match /assignments/{assignmentId} {
-      allow read: if isSignedIn(); // Simplified, should check class access
-      allow write: if isTeacher();
+      allow read: if isAuthenticated() && (
+        get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid ||
+        (
+          (request.auth.uid in get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.studentUids ||
+           request.auth.token.email.lower() in get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.studentEmails) &&
+          resource.data.isVisible != false
+        )
+      );
+      allow create: if isTeacher();
+      allow update: if isAuthenticated() && (
+        get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid;
     }
 
     // Submissions
     match /submissions/{submissionId} {
-      allow read: if isSignedIn() && (
-        isTeacher() ||
-        resource.data.studentId == request.auth.uid ||
-        // Allow reading if assigned as a reviewer
-        exists(/databases/$(database)/documents/reviews/$(request.auth.uid + '_' + submissionId))
+      allow read: if isAuthenticated() && (
+        get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid ||
+        resource.data.studentId == request.auth.uid
       );
-      allow create: if isStudent();
-      allow update: if isSignedIn() && (isTeacher() || resource.data.studentId == request.auth.uid);
+      allow create: if isAuthenticated() && (
+        (request.auth.uid in get(/databases/$(database)/documents/classes/$(request.resource.data.classId)).data.studentUids ||
+         request.auth.token.email.lower() in get(/databases/$(database)/documents/classes/$(request.resource.data.classId)).data.studentEmails) &&
+        get(/databases/$(database)/documents/assignments/$(request.resource.data.assignmentId)).data.allowSubmissions != false
+      );
+      allow update: if isAuthenticated() && (
+        get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid ||
+        resource.data.studentId == request.auth.uid
+      );
     }
 
     // Reviews
-    // Using a composite ID for reviews: reviewerId + "_" + submissionId
     match /reviews/{reviewId} {
-      allow read: if isSignedIn() && (
-        isTeacher() ||
+      allow read: if isAuthenticated() && (
+        get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid ||
         resource.data.reviewerId == request.auth.uid ||
-        resource.data.authorId == request.auth.uid
+        (resource.data.authorId == request.auth.uid && resource.data.status == 'completed')
       );
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (
-        isTeacher() ||
+      allow create: if isAuthenticated(); // Broad for now, logic handled in app
+      allow update: if isAuthenticated() && (
         resource.data.reviewerId == request.auth.uid ||
-        resource.data.authorId == request.auth.uid
+        resource.data.authorId == request.auth.uid || // For meta-reviews
+        get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid
       );
+      allow delete: if isAuthenticated() && get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid;
     }
   }
 }

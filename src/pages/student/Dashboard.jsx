@@ -4,8 +4,10 @@ import { db } from '../../lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { BookOpen, ChevronRight, GraduationCap, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 export default function StudentDashboard() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [classes, setClasses] = useState([]);
   const [pendingClasses, setPendingClasses] = useState([]);
@@ -40,14 +42,14 @@ export default function StudentDashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Student Dashboard</h1>
-        <p className="text-gray-500">View your classes and active assignments</p>
+        <h1 className="text-3xl font-bold text-gray-900">{t('dashboard.student_title')}</h1>
+        <p className="text-gray-500">{t('dashboard.view_classes')}</p>
       </div>
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold flex items-center gap-2">
           <GraduationCap className="w-5 h-5 text-indigo-600" />
-          My Classes
+          {t('dashboard.my_classes')}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {classes.map((cls) => (
@@ -63,12 +65,12 @@ export default function StudentDashboard() {
                 <ChevronRight className="w-5 h-5 text-gray-400" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">{cls.name}</h3>
-              <p className="text-sm text-gray-500 italic">Enrolled</p>
+              <p className="text-sm text-gray-500 italic">{t('dashboard.enrolled')}</p>
             </Link>
           ))}
           {classes.length === 0 && pendingClasses.length === 0 && (
             <div className="col-span-full py-12 text-center bg-gray-50 border-2 border-dashed rounded-xl">
-              <p className="text-gray-500">You haven't joined any classes yet. Use a join link provided by your teacher.</p>
+              <p className="text-gray-500">{t('dashboard.no_classes_student')}</p>
             </div>
           )}
         </div>
@@ -78,13 +80,13 @@ export default function StudentDashboard() {
         <section className="space-y-4">
           <h2 className="text-xl font-semibold flex items-center gap-2">
             <Clock className="w-5 h-5 text-orange-500" />
-            Pending Approval
+            {t('dashboard.pending_approval')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {pendingClasses.map((cls) => (
               <div key={cls.id} className="bg-orange-50 border border-orange-100 rounded-xl p-6 opacity-75">
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">{cls.name}</h3>
-                <p className="text-sm text-orange-600 font-medium">Waiting for teacher approval...</p>
+                <p className="text-sm text-orange-600 font-medium">{t('dashboard.waiting_for_approval')}</p>
               </div>
             ))}
           </div>

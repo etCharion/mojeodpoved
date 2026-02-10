@@ -4,8 +4,10 @@ import { db } from '../../lib/firebase';
 import { collection, addDoc, doc, setDoc, updateDoc, serverTimestamp, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
 import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, RefreshCw } from 'lucide-react';
 import { runDistribution } from '../../lib/logic';
+import { useTranslation } from 'react-i18next';
 
 export default function StudentAssignmentView({ assignment, submissions, reviews }) {
+  const { t } = useTranslation();
   const { user, userData } = useAuth();
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -41,7 +43,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       await runDistribution(assignment.id);
     } catch (err) {
       console.error(err);
-      alert('Error submitting work');
+      alert(t('assignment.error_submitting_work'));
     } finally {
       setSubmitting(false);
     }
@@ -50,7 +52,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
     if (assignment.mandatory_feedback && reviewForm.feedback.length < assignment.min_char_count) {
-      alert(`Feedback must be at least ${assignment.min_char_count} characters.`);
+      alert(t('assignment.char_required').replace('{{current}}', reviewForm.feedback.length).replace('{{min}}', assignment.min_char_count));
       return;
     }
 
@@ -72,7 +74,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       setReviewForm({ ratings: {}, feedback: '' });
     } catch (err) {
       console.error(err);
-      alert('Error saving review');
+      alert(t('assignment.error_saving_review'));
     }
   };
 
@@ -91,24 +93,31 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           <p className="text-gray-500 mt-2">{assignment.description}</p>
         </div>
 
-        <form onSubmit={handleSubmitWork} className="bg-white p-6 rounded-xl border shadow-sm space-y-4">
-          <h2 className="text-xl font-semibold">Submit Your Work</h2>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            className="w-full h-64 p-4 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-            placeholder="Type your response here..."
-            required
-          />
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition-colors disabled:bg-gray-400"
-          >
-            <Send className="w-5 h-5" />
-            {submitting ? 'Submitting...' : 'Submit Assignment'}
-          </button>
-        </form>
+        {assignment.allowSubmissions !== false ? (
+          <form onSubmit={handleSubmitWork} className="bg-white p-6 rounded-xl border shadow-sm space-y-4">
+            <h2 className="text-xl font-semibold">{t('assignment.submit_work')}</h2>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              className="w-full h-64 p-4 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              placeholder={t('assignment.type_response')}
+              required
+            />
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition-colors disabled:bg-gray-400"
+            >
+              <Send className="w-5 h-5" />
+              {submitting ? t('common.loading') : t('assignment.submit_review').replace('Review', 'Assignment')}
+            </button>
+          </form>
+        ) : (
+          <div className="bg-gray-50 border-2 border-dashed p-12 rounded-xl text-center text-gray-500">
+            <AlertCircle className="w-12 h-12 mx-auto mb-4 opacity-20" />
+            <p className="text-lg font-medium">{t('assignment.submissions_closed')}</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -119,14 +128,14 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     return (
       <div className="max-w-4xl mx-auto space-y-8 pb-20">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Reviewing Peer's Work</h1>
-          <button onClick={() => setActiveReview(null)} className="text-gray-500 hover:underline">Cancel</button>
+          <h1 className="text-2xl font-bold">{t('assignment.reviewing_peer')}</h1>
+          <button onClick={() => setActiveReview(null)} className="text-gray-500 hover:underline">{t('common.cancel')}</button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Peer Work */}
           <div className="bg-white p-6 rounded-xl border h-fit sticky top-4">
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Peer Submission</h3>
+            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">{t('assignment.peer_submission')}</h3>
             <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">
               {targetSubmission?.content?.text}
             </div>
@@ -135,7 +144,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           {/* Rubric Form */}
           <form onSubmit={handleReviewSubmit} className="space-y-6">
             <div className="bg-white p-6 rounded-xl border space-y-6">
-              <h3 className="text-lg font-bold">Rubric</h3>
+              <h3 className="text-lg font-bold">{t('assignment.rubric')}</h3>
               {assignment.rubric.map((item) => (
                 <div key={item.id} className="space-y-3">
                   <label className="font-medium text-gray-700">{item.question}</label>
@@ -174,17 +183,17 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
             </div>
 
             <div className="bg-white p-6 rounded-xl border space-y-4">
-              <h3 className="text-lg font-bold">Feedback</h3>
+              <h3 className="text-lg font-bold">{t('assignment.feedback')}</h3>
               <textarea
                 value={reviewForm.feedback}
                 onChange={(e) => setReviewForm(prev => ({ ...prev, feedback: e.target.value }))}
                 className="w-full h-32 p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="Write your constructive feedback here..."
+                placeholder={t('assignment.type_response')}
                 required={assignment.mandatory_feedback}
               />
               {assignment.mandatory_feedback && (
                 <p className={`text-xs ${reviewForm.feedback.length < assignment.min_char_count ? 'text-red-500' : 'text-green-600'}`}>
-                  {reviewForm.feedback.length} / {assignment.min_char_count} characters required
+                  {t('assignment.char_required', { current: reviewForm.feedback.length, min: assignment.min_char_count })}
                 </p>
               )}
             </div>
@@ -194,7 +203,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               disabled={assignment.mandatory_feedback && reviewForm.feedback.length < assignment.min_char_count}
               className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 shadow-lg transition-all disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              Submit Review
+              {t('assignment.submit_review')}
             </button>
           </form>
         </div>
@@ -212,11 +221,11 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           <div className="mt-6 flex items-center gap-4">
             <span className="flex items-center gap-1.5 bg-white/20 px-3 py-1 rounded-full text-sm">
               <CheckCircle className="w-4 h-4" />
-              Work Submitted
+              {t('assignment.work_submitted')}
             </span>
             <span className="flex items-center gap-1.5 bg-white/20 px-3 py-1 rounded-full text-sm">
               <Users className="w-4 h-4" />
-              {reviewsCompleted} / {reviewsNeeded} Reviews Done
+              {t('assignment.reviews_done', { completed: reviewsCompleted, needed: reviewsNeeded })}
             </span>
           </div>
         </div>
@@ -229,12 +238,12 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-bold flex items-center gap-2">
               <MessageSquare className="w-5 h-5 text-indigo-600" />
-              Peer Reviews
+              {t('assignment.peer_reviews')}
             </h2>
             <button
               onClick={() => runDistribution(assignment.id)}
               className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-              title="Check for new assignments"
+              title={t('assignment.check_new_tasks')}
             >
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -244,10 +253,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
             <div className="bg-orange-50 border border-orange-100 p-6 rounded-xl flex items-start gap-4 text-orange-800">
               <Clock className="w-6 h-6 shrink-0 mt-1" />
               <div>
-                <p className="font-bold">Waiting Room</p>
+                <p className="font-bold">{t('assignment.waiting_room')}</p>
                 <p className="text-sm opacity-90">
-                  Reviews will be assigned once {assignment.review_start_threshold} students have submitted their work.
-                  Currently: {submissions.length} / {assignment.review_start_threshold}
+                  {t('assignment.waiting_room_desc', { count: assignment.review_start_threshold, current: submissions.length })}
                 </p>
               </div>
             </div>
@@ -256,24 +264,25 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               {myReviewsGiven.map((rev, i) => (
                 <div key={rev.id} className="bg-white border rounded-xl p-4 flex justify-between items-center shadow-sm">
                   <div>
-                    <p className="font-medium">Peer Review #{i + 1}</p>
+                    <p className="font-medium">{t('assignment.review_number', { count: i + 1 })}</p>
                     <p className={`text-sm ${rev.status === 'completed' ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
-                      {rev.status === 'completed' ? '✓ Completed' : 'Pending Action'}
+                      {rev.status === 'completed' ? `✓ ${t('common.completed')}` : t('common.pending')}
                     </p>
                   </div>
                   {rev.status !== 'completed' && (
                     <button
                       onClick={() => setActiveReview(rev)}
-                      className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-indigo-700"
+                      disabled={assignment.allowReviews === false}
+                      className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                     >
-                      Start Review
+                      {assignment.allowReviews === false ? t('common.status').replace('Status', 'Closed') : t('assignment.start_review')}
                     </button>
                   )}
                 </div>
               ))}
               {myReviewsGiven.length < reviewsNeeded && (
                 <div className="bg-gray-50 border-2 border-dashed p-4 rounded-xl text-center text-gray-500 text-sm">
-                  Wait for more peers to submit to receive more review tasks.
+              {assignment.allowReviews === false ? t('assignment.reviews_closed') : t('assignment.wait_more_peers')}
                 </div>
               )}
             </div>
@@ -284,13 +293,13 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
         <div className="space-y-6">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Star className="w-5 h-5 text-yellow-500" />
-            Feedback Received
+            {t('assignment.feedback_received')}
           </h2>
           <div className="space-y-4">
             {myReviewsReceived.map((rev, i) => (
               <div key={rev.id} className="bg-white border rounded-xl p-6 shadow-sm space-y-4">
                 <div className="flex justify-between items-start">
-                  <p className="text-sm font-bold text-gray-400 uppercase">Review #{i + 1}</p>
+                  <p className="text-sm font-bold text-gray-400 uppercase">{t('assignment.review_number', { count: i + 1 })}</p>
                   <div className="flex text-yellow-400">
                     {/* Just showing one star as indicator, or could average */}
                     <Star className="w-4 h-4 fill-current" />
@@ -302,7 +311,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
                 {/* Meta-Review / Agreement */}
                 <div className="pt-4 border-t space-y-3">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Do you agree with this feedback?</p>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">{t('assignment.do_you_agree')}</p>
                   {!rev.agreement?.status ? (
                     <div className="space-y-2">
                       <div className="flex gap-2">
@@ -310,18 +319,18 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                           onClick={() => handleMetaReview(rev.id, 'agree', metaReviewNotes[rev.id] || '')}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-xs font-bold hover:bg-green-100"
                         >
-                          <ThumbsUp className="w-3.5 h-3.5" /> Agree
+                          <ThumbsUp className="w-3.5 h-3.5" /> {t('assignment.agree')}
                         </button>
                         <button
                           onClick={() => handleMetaReview(rev.id, 'disagree', metaReviewNotes[rev.id] || '')}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100"
                         >
-                          <ThumbsDown className="w-3.5 h-3.5" /> Disagree
+                          <ThumbsDown className="w-3.5 h-3.5" /> {t('assignment.disagree')}
                         </button>
                       </div>
                       <input
                         type="text"
-                        placeholder="Add a note (optional)..."
+                        placeholder={t('assignment.add_note')}
                         value={metaReviewNotes[rev.id] || ''}
                         onChange={(e) => setMetaReviewNotes({ ...metaReviewNotes, [rev.id]: e.target.value })}
                         className="w-full text-xs px-2 py-1.5 border rounded outline-none focus:ring-1 focus:ring-indigo-500"
@@ -330,7 +339,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                   ) : (
                     <div className="flex items-center gap-2">
                       <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${rev.agreement.status === 'agree' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        You {rev.agreement.status}d
+                        {rev.agreement.status === 'agree' ? t('assignment.you_agreed') : t('assignment.you_disagreed')}
                       </span>
                       {rev.agreement.note && <span className="text-xs text-gray-500 italic">"{rev.agreement.note}"</span>}
                     </div>
@@ -340,7 +349,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
             ))}
             {myReviewsReceived.length === 0 && (
               <div className="py-12 text-center bg-gray-50 border-2 border-dashed rounded-xl text-gray-400 text-sm">
-                No feedback received yet.
+                {t('assignment.no_feedback')}
               </div>
             )}
           </div>
