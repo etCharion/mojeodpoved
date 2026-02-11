@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
 import { collection, addDoc, doc, setDoc, updateDoc, serverTimestamp, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
-import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, RefreshCw } from 'lucide-react';
+import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, RefreshCw, Users, BookOpen } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import { runDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
