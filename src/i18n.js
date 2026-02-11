@@ -31,6 +31,12 @@ const resources = {
       },
       navbar: {
         title: 'PeerGrade',
+        join_class: 'Připojit se ke třídě',
+        notifications: 'Oznámení',
+        no_notifications: 'Žádná nová oznámení',
+        pre_approved_available: 'Máte pozvánku do třídy',
+        pending_approval: 'Čeká na schválení učitelem',
+        join_invite: 'Vstoupit',
       },
       login: {
         title: 'Přihlášení do PeerGrade',
@@ -214,6 +220,12 @@ const resources = {
       },
       navbar: {
         title: 'PeerGrade',
+        join_class: 'Join Class',
+        notifications: 'Notifications',
+        no_notifications: 'No new notifications',
+        pre_approved_available: 'You have an invitation to a class',
+        pending_approval: 'Waiting for teacher approval',
+        join_invite: 'Join',
       },
       login: {
         title: 'Sign in to PeerGrade',
