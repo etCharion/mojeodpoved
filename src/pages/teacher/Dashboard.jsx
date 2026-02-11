@@ -32,6 +32,7 @@ export default function TeacherDashboard() {
       studentEmails: [],
       studentUids: [],
       pendingStudents: [],
+      joinCode: Math.floor(100000 + Math.random() * 900000).toString(),
       createdAt: serverTimestamp()
     });
 

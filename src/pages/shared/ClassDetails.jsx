@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
 import { doc, onSnapshot, collection, query, where, updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
-import { Users, BookOpen, Plus, Check, X, Clipboard, ExternalLink, Trash2 } from 'lucide-react';
+import { Users, BookOpen, Plus, Check, X, Clipboard, ExternalLink, Trash2, QrCode } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import { useTranslation } from 'react-i18next';
 
@@ -15,13 +16,23 @@ export default function ClassDetails() {
   const [assignments, setAssignments] = useState([]);
   const [newStudentEmail, setNewStudentEmail] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showQRModal, setShowQRModal] = useState(false);
 
   useEffect(() => {
     if (!classId) return;
 
-    const unsubClass = onSnapshot(doc(db, 'classes', classId), (doc) => {
-      if (doc.exists()) {
-        setClassInfo({ id: doc.id, ...doc.data() });
+    const unsubClass = onSnapshot(doc(db, 'classes', classId), async (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const data = docSnapshot.data();
+        setClassInfo({ id: docSnapshot.id, ...data });
+
+        // Generate joinCode if missing
+        if (!data.joinCode) {
+          const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+          await updateDoc(doc(db, 'classes', classId), {
+            joinCode: newCode
+          });
+        }
       }
       setLoading(false);
     });
@@ -40,8 +51,16 @@ export default function ClassDetails() {
   const handleAddStudent = async (e) => {
     e.preventDefault();
     if (!newStudentEmail.trim()) return;
+
+    const emails = newStudentEmail
+      .split(/[,\s\n\t;]+/)
+      .map(email => email.trim().toLowerCase())
+      .filter(email => email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
+
+    if (emails.length === 0) return;
+
     await updateDoc(doc(db, 'classes', classId), {
-      studentEmails: arrayUnion(newStudentEmail.trim().toLowerCase())
+      studentEmails: arrayUnion(...emails)
     });
     setNewStudentEmail('');
   };
@@ -85,10 +104,13 @@ export default function ClassDetails() {
     }
   };
 
-  const copyJoinLink = () => {
+  const getJoinLink = () => {
     const baseUrl = import.meta.env.BASE_URL;
-    const link = `${window.location.origin}${baseUrl}${baseUrl.endsWith('/') ? '' : '/'}join/${classId}`;
-    navigator.clipboard.writeText(link);
+    return `${window.location.origin}${baseUrl}${baseUrl.endsWith('/') ? '' : '/'}join/${classId}`;
+  };
+
+  const copyJoinLink = () => {
+    navigator.clipboard.writeText(getJoinLink());
     alert(t('class.link_copied'));
   };
 
@@ -165,27 +187,50 @@ export default function ClassDetails() {
             </h2>
 
             <div className="bg-white border rounded-xl p-4 space-y-4">
-              <div>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={copyJoinLink}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-indigo-200 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors text-sm font-medium"
+                  className="flex items-center justify-center gap-2 px-3 py-2 border border-indigo-200 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors text-xs font-medium"
+                  title={t('class.copy_link')}
                 >
                   <Clipboard className="w-4 h-4" />
-                  {t('class.copy_link')}
+                  <span>{t('class.copy_link')}</span>
+                </button>
+                <button
+                  onClick={() => setShowQRModal(true)}
+                  className="flex items-center justify-center gap-2 px-3 py-2 border border-indigo-200 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors text-xs font-medium"
+                >
+                  <QrCode className="w-4 h-4" />
+                  <span>{t('class.qr_code')}</span>
                 </button>
               </div>
 
+              <div className="flex flex-col items-center p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                <div className="text-center mb-2">
+                  <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">{t('class.join_code')}</p>
+                  <p className="text-2xl font-mono font-bold text-indigo-600 tracking-widest">
+                    {classInfo.joinCode?.replace(/(\d{3})(\d{3})/, '$1 $2') || '------'}
+                  </p>
+                </div>
+                <div
+                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => setShowQRModal(true)}
+                >
+                  <QRCodeSVG value={getJoinLink()} size={80} />
+                </div>
+              </div>
+
               <form onSubmit={handleAddStudent} className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">{t('class.add_by_email')}</label>
-                <div className="flex gap-2">
-                  <input
-                    type="email"
+                <label className="text-sm font-medium text-gray-700">{t('class.add_batch')}</label>
+                <div className="flex flex-col gap-2">
+                  <textarea
                     value={newStudentEmail}
                     onChange={(e) => setNewStudentEmail(e.target.value)}
-                    placeholder="student@gmail.com"
-                    className="flex-1 px-3 py-1.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder={t('class.batch_placeholder')}
+                    rows="3"
+                    className="w-full px-3 py-1.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                   />
-                  <button type="submit" className="bg-gray-900 text-white px-3 py-1.5 rounded-lg text-sm">
+                  <button type="submit" className="w-full bg-gray-900 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">
                     {t('class.add')}
                   </button>
                 </div>
@@ -241,6 +286,37 @@ export default function ClassDetails() {
           </div>
         )}
       </div>
+
+      {/* QR Code Modal */}
+      {showQRModal && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-8" onClick={() => setShowQRModal(false)}>
+          <div className="bg-white rounded-3xl p-8 max-w-2xl w-full flex flex-col items-center gap-8 relative" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setShowQRModal(false)}
+              className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-8 h-8" />
+            </button>
+
+            <h2 className="text-3xl font-bold text-gray-900">{classInfo.name}</h2>
+
+            <div className="bg-white p-4 rounded-2xl shadow-lg">
+              <QRCodeSVG value={getJoinLink()} size={400} level="H" />
+            </div>
+
+            <div className="text-center">
+              <p className="text-sm text-gray-500 uppercase font-bold tracking-[0.2em] mb-2">{t('class.join_code')}</p>
+              <p className="text-7xl font-mono font-bold text-indigo-600 tracking-widest">
+                {classInfo.joinCode?.replace(/(\d{3})(\d{3})/, '$1 $2')}
+              </p>
+            </div>
+
+            <div className="text-center mt-4">
+              <p className="text-xl text-gray-600 font-medium">{getJoinLink()}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
