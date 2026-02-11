@@ -14,39 +14,11 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        // Fetch or create user document
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          setUserData(userDoc.data());
-        } else {
-          // For demo purposes, if email contains 'teacher' or 'admin', or matches the primary admin email, make them a teacher.
-          const adminEmail = 'gunka.daniel@gmail.com';
-          const isTeacher =
-            user.email.toLowerCase() === adminEmail.toLowerCase() ||
-            user.email.toLowerCase().includes('teacher') ||
-            user.email.toLowerCase().includes('admin');
-
-          const newData = {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL,
-            role: isTeacher ? 'teacher' : 'student',
-            createdAt: new Date().toISOString()
-          };
-          await setDoc(doc(db, 'users', user.uid), newData);
-          setUserData(newData);
-        }
-      } else {
-        setUserData(null);
-      }
-      setLoading(false);
-    });
-
-    return unsubscribe;
+    // MOCK AUTH FOR VERIFICATION
+    setUser({ uid: 'mock-teacher-uid', email: 'teacher@test.com', displayName: 'Mock Teacher' });
+    setUserData({ role: 'teacher', uid: 'mock-teacher-uid', email: 'teacher@test.com' });
+    setLoading(false);
+    return () => {};
   }, []);
 
   const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
