@@ -12,8 +12,7 @@ export default function StudentDashboard() {
   const navigate = useNavigate();
   const [classes, setClasses] = useState([]);
   const [pendingClasses, setPendingClasses] = useState([]);
-  const [joinCode, setJoinCode] = useState('');
-  const [isJoining, setIsJoining] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
@@ -21,14 +20,18 @@ export default function StudentDashboard() {
     // Classes where student is enrolled
     const q1 = query(collection(db, 'classes'), where('studentUids', 'array-contains', user.uid));
     const unsub1 = onSnapshot(q1, (snapshot) => {
-      setClasses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const loadedClasses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setClasses(loadedClasses);
+      setLoading(false);
+
+      // Automatic redirection if in exactly one class
+      if (loadedClasses.length === 1) {
+        navigate(`/student/class/${loadedClasses[0].id}`, { replace: true });
+      }
     });
 
-    // Classes where student is pending (this is harder to query directly with where, so we might need to filter client-side or store it differently)
-    // For now, let's just query all classes and filter? No, that's bad.
-    // Let's just query classes where pendingStudents contains a match. Firestore doesn't support array-contains on objects well for specific fields.
-    // However, for this demo, I'll just look for classes where student has a pending request.
-    const q2 = query(collection(db, 'classes')); // In production, use a more specific query
+    // Classes where student is pending
+    const q2 = query(collection(db, 'classes'));
     const unsub2 = onSnapshot(q2, (snapshot) => {
       const pending = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() }))
@@ -40,30 +43,15 @@ export default function StudentDashboard() {
       unsub1();
       unsub2();
     };
-  }, [user]);
+  }, [user, navigate]);
 
-  const handleJoinByCode = async (e) => {
-    e.preventDefault();
-    const code = joinCode.trim().replace(/\s/g, '');
-    if (code.length !== 6) return;
-
-    setIsJoining(true);
-    try {
-      const q = query(collection(db, 'classes'), where('joinCode', '==', code));
-      const snapshot = await getDocs(q);
-      if (snapshot.empty) {
-        alert(t('dashboard.invalid_code'));
-      } else {
-        const classId = snapshot.docs[0].id;
-        navigate(`/join/${classId}`);
-      }
-    } catch (err) {
-      console.error("Error joining by code:", err);
-      alert(t('join.error_desc'));
-    } finally {
-      setIsJoining(false);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -72,36 +60,6 @@ export default function StudentDashboard() {
           <h1 className="text-3xl font-bold text-gray-900">{t('dashboard.student_title')}</h1>
           <p className="text-gray-500">{t('dashboard.view_classes')}</p>
         </div>
-
-        <form onSubmit={handleJoinByCode} className="flex flex-col gap-2 w-full md:w-auto">
-          <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            {t('dashboard.join_class')}
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              maxLength="7"
-              value={joinCode}
-              onChange={(e) => {
-                const val = e.target.value.replace(/\D/g, '');
-                if (val.length <= 6) {
-                  setJoinCode(val.length > 3 ? `${val.slice(0, 3)} ${val.slice(3)}` : val);
-                }
-              }}
-              placeholder="123 456"
-              className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-center tracking-widest w-full md:w-32"
-            />
-            <button
-              type="submit"
-              disabled={isJoining || joinCode.replace(/\s/g, '').length !== 6}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
-            >
-              {isJoining ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              {t('dashboard.join_submit')}
-            </button>
-          </div>
-        </form>
       </div>
 
       <section className="space-y-4">
