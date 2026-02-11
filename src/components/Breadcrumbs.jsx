@@ -16,6 +16,7 @@ export default function Breadcrumbs() {
 
   const [className, setClassName] = useState('');
   const [assignmentName, setAssignmentName] = useState('');
+  const [classIdFromAssignment, setClassIdFromAssignment] = useState(null);
 
   const isTeacher = userData?.role === 'teacher';
   const baseRoute = isTeacher ? '/teacher' : '/student';
@@ -34,6 +35,7 @@ export default function Breadcrumbs() {
         if (assignmentSnap.exists()) {
           const data = assignmentSnap.data();
           setAssignmentName(data.title);
+          setClassIdFromAssignment(data.classId);
           if (!classId && data.classId) {
             // If we only have assignmentId, we might need classId to build the link
             const classSnap = await getDoc(doc(db, 'classes', data.classId));
@@ -57,6 +59,8 @@ export default function Breadcrumbs() {
   const isNewAssignment = location.pathname.includes('/assignment/new');
   const isEditAssignment = location.pathname.includes('/assignment/edit');
 
+  const activeClassId = classId || classIdFromAssignment;
+
   return (
     <nav className="flex items-center gap-2 text-sm text-gray-500 mt-1 overflow-x-auto whitespace-nowrap">
       <Link
@@ -67,11 +71,11 @@ export default function Breadcrumbs() {
         <span>{t('common.home')}</span>
       </Link>
 
-      {(classId || (assignmentId && className)) && (
+      {(activeClassId) && (
         <>
           <ChevronRight className="w-4 h-4 shrink-0" />
           <Link
-            to={`${baseRoute}/class/${classId || pathParts[pathParts.length - 1]}`}
+            to={`${baseRoute}/class/${activeClassId}`}
             className="hover:text-indigo-600 transition-colors max-w-[150px] truncate"
           >
             {className || t('common.loading')}
