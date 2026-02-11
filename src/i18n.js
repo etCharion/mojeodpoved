@@ -147,6 +147,11 @@ const resources = {
         allow_reviews_desc: 'Umožňuje studentům psát recenze',
         submissions_closed: 'Odevzdávání je uzavřeno.',
         reviews_closed: 'Recenze jsou uzavřeny.',
+        view_detail: 'Zobrazit detail',
+        your_submission: 'Vaše odevzdaná práce',
+        review_given_detail: 'Detail vaší odeslané recenze',
+        review_received_detail: 'Detail obdržené recenze',
+        agreement_status: 'Stav souhlasu',
       },
       join: {
         joining: 'Připojování ke třídě...',
@@ -305,6 +310,11 @@ const resources = {
         allow_reviews_desc: 'Enable students to write reviews',
         submissions_closed: 'Submissions are closed.',
         reviews_closed: 'Reviews are closed.',
+        view_detail: 'View Detail',
+        your_submission: 'Your Submission',
+        review_given_detail: 'Your Submitted Review Detail',
+        review_received_detail: 'Received Review Detail',
+        agreement_status: 'Agreement Status',
       },
       join: {
         joining: 'Joining class...',

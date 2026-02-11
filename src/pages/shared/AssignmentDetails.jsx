@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot, collection, query, where, getDocs, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send } from 'lucide-react';
 import StudentAssignmentView from '../student/StudentAssignmentView';
 import Breadcrumbs from '../../components/Breadcrumbs';
+import RubricDisplay from '../../components/RubricDisplay';
 import { runDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
@@ -229,19 +230,9 @@ export default function AssignmentDetails() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
+                <div className="space-y-4">
                   <p className="text-sm font-medium text-gray-500 uppercase tracking-tight">{t('assignment.ratings')}</p>
-                  {Object.entries(review.ratings || {}).map(([id, val]) => {
-                    const criterion = assignment.rubric.find(r => r.id === id);
-                    return (
-                      <div key={id} className="flex justify-between items-center text-sm">
-                        <span>{criterion?.question}</span>
-                        <div className="flex items-center gap-1 font-bold text-indigo-600">
-                          {val} <Star className="w-3 h-3 fill-current" />
-                        </div>
-                      </div>
-                    );
-                  })}
+                  <RubricDisplay rubric={assignment.rubric} ratings={review.ratings} />
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-gray-500 uppercase tracking-tight">{t('assignment.feedback')}</p>
