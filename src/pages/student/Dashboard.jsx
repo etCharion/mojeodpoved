@@ -1,21 +1,105 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
-import { BookOpen, ChevronRight, GraduationCap, Clock, Plus, Loader2 } from 'lucide-react';
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import * as Icons from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { CLASS_COLORS } from '../../lib/constants';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+function SortableClassCard({ cls, userSettings, t }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: cls.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  const settings = userSettings?.[cls.id] || {};
+  const colorKey = settings.color || cls.color || 'indigo';
+  const iconName = settings.icon || cls.icon || 'BookOpen';
+  const colorConfig = CLASS_COLORS[colorKey] || CLASS_COLORS.indigo;
+  const IconComponent = Icons[iconName] || Icons.BookOpen;
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="relative h-full">
+      <Link
+        to={`/student/class/${cls.id}`}
+        className="block bg-white border rounded-xl p-6 hover:shadow-md transition-shadow h-full"
+        onClick={(e) => {
+          if (isDragging) e.preventDefault();
+        }}
+      >
+        <div className="flex justify-between items-start mb-4">
+          <div className={`${colorConfig.bg} p-3 rounded-lg ${colorConfig.text}`}>
+            <IconComponent className="w-6 h-6" />
+          </div>
+          <Icons.ChevronRight className="w-5 h-5 text-gray-400" />
+        </div>
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">{cls.name}</h3>
+        <p className="text-sm text-gray-500 italic">{t('dashboard.enrolled')}</p>
+      </Link>
+    </div>
+  );
+}
 
 export default function StudentDashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [classes, setClasses] = useState([]);
+  const [userSettings, setUserSettings] = useState({});
+  const [classOrder, setClassOrder] = useState([]);
   const [pendingClasses, setPendingClasses] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   useEffect(() => {
     if (!user) return;
+
+    // Listen to user document for settings and order
+    const unsubUser = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setUserSettings(data.classSettings || {});
+        setClassOrder(data.classOrder || []);
+      }
+    });
 
     // Classes where student is enrolled
     const q1 = query(collection(db, 'classes'), where('studentUids', 'array-contains', user.uid));
@@ -25,7 +109,7 @@ export default function StudentDashboard() {
       setLoading(false);
 
       // Automatic redirection if in exactly one class
-      if (loadedClasses.length === 1) {
+      if (loadedClasses.length === 1 && !classOrder.length) {
         navigate(`/student/class/${loadedClasses[0].id}`, { replace: true });
       }
     });
@@ -40,15 +124,43 @@ export default function StudentDashboard() {
     });
 
     return () => {
+      unsubUser();
       unsub1();
       unsub2();
     };
-  }, [user, navigate]);
+  }, [user, navigate, classOrder.length]);
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = sortedClasses.findIndex((cls) => cls.id === active.id);
+      const newIndex = sortedClasses.findIndex((cls) => cls.id === over.id);
+
+      const newSortedClasses = arrayMove(sortedClasses, oldIndex, newIndex);
+      const newOrder = newSortedClasses.map(c => c.id);
+
+      setClassOrder(newOrder);
+      await updateDoc(doc(db, 'users', user.uid), {
+        classOrder: newOrder
+      });
+    }
+  };
+
+  const sortedClasses = [...classes].sort((a, b) => {
+    const indexA = classOrder.indexOf(a.id);
+    const indexB = classOrder.indexOf(b.id);
+
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+    if (indexA !== -1) return -1;
+    if (indexB !== -1) return 1;
+
+    return a.name.localeCompare(b.name);
+  });
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        <Icons.Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
       </div>
     );
   }
@@ -64,38 +176,41 @@ export default function StudentDashboard() {
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold flex items-center gap-2">
-          <GraduationCap className="w-5 h-5 text-indigo-600" />
+          <Icons.GraduationCap className="w-5 h-5 text-indigo-600" />
           {t('dashboard.my_classes')}
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {classes.map((cls) => (
-            <Link
-              key={cls.id}
-              to={`/student/class/${cls.id}`}
-              className="block bg-white border rounded-xl p-6 hover:shadow-md transition-shadow"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div className="bg-indigo-100 p-3 rounded-lg text-indigo-600">
-                  <BookOpen className="w-6 h-6" />
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={sortedClasses.map(c => c.id)}
+            strategy={rectSortingStrategy}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {sortedClasses.map((cls) => (
+                <SortableClassCard
+                  key={cls.id}
+                  cls={cls}
+                  userSettings={userSettings}
+                  t={t}
+                />
+              ))}
+              {classes.length === 0 && pendingClasses.length === 0 && (
+                <div className="col-span-full py-12 text-center bg-gray-50 border-2 border-dashed rounded-xl">
+                  <p className="text-gray-500">{t('dashboard.no_classes_student')}</p>
                 </div>
-                <ChevronRight className="w-5 h-5 text-gray-400" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">{cls.name}</h3>
-              <p className="text-sm text-gray-500 italic">{t('dashboard.enrolled')}</p>
-            </Link>
-          ))}
-          {classes.length === 0 && pendingClasses.length === 0 && (
-            <div className="col-span-full py-12 text-center bg-gray-50 border-2 border-dashed rounded-xl">
-              <p className="text-gray-500">{t('dashboard.no_classes_student')}</p>
+              )}
             </div>
-          )}
-        </div>
+          </SortableContext>
+        </DndContext>
       </section>
 
       {pendingClasses.length > 0 && (
         <section className="space-y-4">
           <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Clock className="w-5 h-5 text-orange-500" />
+            <Icons.Clock className="w-5 h-5 text-orange-500" />
             {t('dashboard.pending_approval')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
