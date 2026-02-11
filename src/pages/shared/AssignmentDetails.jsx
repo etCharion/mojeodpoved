@@ -167,11 +167,20 @@ export default function AssignmentDetails() {
         <div className="bg-white p-6 rounded-xl border">
           <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t('assignment.average_score')}</p>
           <p className="text-4xl font-bold mt-2">
-            {(reviews.reduce((acc, r) => {
-              const rValues = Object.values(r.ratings || {});
-              if (rValues.length === 0) return acc;
-              return acc + (rValues.reduce((a, b) => a + b, 0) / rValues.length);
-            }, 0) / (reviews.filter(r => r.status === 'completed').length || 1)).toFixed(1)}
+            {(() => {
+              const passFailIds = new Set(assignment.rubric?.filter(i => i.type === 'passfail').map(i => i.id) || []);
+              const completedReviews = reviews.filter(r => r.status === 'completed');
+              if (completedReviews.length === 0) return '0.0';
+
+              const totalSum = completedReviews.reduce((acc, r) => {
+                const ratings = Object.entries(r.ratings || {})
+                  .filter(([id]) => !passFailIds.has(id))
+                  .map(([, val]) => val);
+                if (ratings.length === 0) return acc;
+                return acc + (ratings.reduce((a, b) => a + b, 0) / ratings.length);
+              }, 0);
+              return (totalSum / completedReviews.length).toFixed(1);
+            })()}
           </p>
           <p className="text-sm text-gray-400 mt-1">{t('assignment.across_criteria')}</p>
         </div>
@@ -283,8 +292,12 @@ export default function AssignmentDetails() {
           {sortedReviews.map((review) => {
             const isExpanded = expandedReviews.has(review.id);
             const authorName = submissions.find(s => s.id === review.submissionId)?.studentName || t('common.unknown');
-            const ratings = Object.values(review.ratings || {});
-            const avgRating = ratings.length > 0 ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null;
+
+            const passFailIds = new Set(assignment.rubric?.filter(i => i.type === 'passfail').map(i => i.id) || []);
+            const numericRatings = Object.entries(review.ratings || {})
+              .filter(([id]) => !passFailIds.has(id))
+              .map(([, val]) => val);
+            const avgRating = numericRatings.length > 0 ? (numericRatings.reduce((a, b) => a + b, 0) / numericRatings.length).toFixed(1) : null;
 
             return (
               <div key={review.id} className="group transition-colors">

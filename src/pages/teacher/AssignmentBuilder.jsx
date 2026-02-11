@@ -293,6 +293,13 @@ export default function AssignmentBuilder() {
               >
                 {t('assignment.add_choice')}
               </button>
+              <button
+                type="button"
+                onClick={() => addRubricItem('passfail')}
+                className="text-sm bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-100 font-medium"
+              >
+                {t('assignment.add_passfail')}
+              </button>
             </div>
           </div>
 
