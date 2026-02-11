@@ -90,11 +90,14 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   // UI rendering based on status
   if (!mySubmission) {
     return (
-      <div className="max-w-2xl mx-auto space-y-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold">{assignment.title}</h1>
-          <p className="text-gray-500 mt-2">{assignment.description}</p>
-          <div className="flex justify-center mt-2">
+      <div className="space-y-8">
+        <div className="flex items-center gap-4">
+          <div className="bg-indigo-100 p-3 rounded-xl text-indigo-600 shadow-sm">
+            <BookOpen className="w-8 h-8" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{assignment.title}</h1>
+            <p className="text-gray-500 mb-1">{assignment.description}</p>
             <Breadcrumbs />
           </div>
         </div>
@@ -132,7 +135,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   if (activeReview) {
     const targetSubmission = submissions.find(s => s.id === activeReview.submissionId);
     return (
-      <div className="max-w-4xl mx-auto space-y-8 pb-20">
+      <div className="space-y-8 pb-20">
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold">{t('assignment.reviewing_peer')}</h1>
@@ -229,7 +232,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     const targetSubmission = isReceived ? mySubmission : submissions.find(s => s.id === targetSubmissionId);
 
     return (
-      <div className="max-w-4xl mx-auto space-y-8 pb-20">
+      <div className="space-y-8 pb-20">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4">
              <button onClick={() => setViewingReview(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
@@ -297,26 +300,28 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
   // Dashboard View
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div className="bg-indigo-600 rounded-2xl p-8 text-white shadow-xl overflow-hidden relative">
-        <div className="relative z-10">
-          <h1 className="text-3xl font-bold">{assignment.title}</h1>
-          <p className="mt-2 text-indigo-100 max-w-xl">{assignment.description}</p>
-          <div className="mt-2">
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+        <div className="flex items-center gap-4">
+          <div className="bg-indigo-100 p-3 rounded-xl text-indigo-600 shadow-sm">
+            <BookOpen className="w-8 h-8" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{assignment.title}</h1>
+            <p className="text-gray-500 mb-1">{assignment.description}</p>
             <Breadcrumbs />
           </div>
-          <div className="mt-6 flex items-center gap-4">
-            <span className="flex items-center gap-1.5 bg-white/20 px-3 py-1 rounded-full text-sm">
-              <CheckCircle className="w-4 h-4" />
-              {t('assignment.work_submitted')}
-            </span>
-            <span className="flex items-center gap-1.5 bg-white/20 px-3 py-1 rounded-full text-sm">
-              <Users className="w-4 h-4" />
-              {t('assignment.reviews_done', { completed: reviewsCompleted, needed: reviewsNeeded })}
-            </span>
-          </div>
         </div>
-        <BookOpen className="absolute -bottom-10 -right-10 w-64 h-64 text-white/10 rotate-12" />
+        <div className="flex gap-2 flex-wrap">
+          <span className="flex items-center gap-1.5 bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-full text-sm font-semibold">
+            <CheckCircle className="w-4 h-4" />
+            {t('assignment.work_submitted')}
+          </span>
+          <span className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-full text-sm font-semibold">
+            <Users className="w-4 h-4" />
+            {t('assignment.reviews_done', { completed: reviewsCompleted, needed: reviewsNeeded })}
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -360,7 +365,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                     {rev.status === 'completed' && (
                       <button
                         onClick={() => setViewingReview(rev)}
-                        className="text-indigo-600 border border-indigo-200 px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-indigo-50"
+                        className="text-indigo-600 border border-indigo-200 px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-indigo-50 transition-colors"
                       >
                         {t('assignment.view_detail')}
                       </button>
@@ -399,7 +404,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                   <p className="text-sm font-bold text-gray-400 uppercase">{t('assignment.review_number', { count: i + 1 })}</p>
                   <button
                     onClick={() => setViewingReview(rev)}
-                    className="text-xs font-bold text-indigo-600 hover:underline"
+                    className="text-indigo-600 border border-indigo-200 px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-indigo-50 transition-colors"
                   >
                     {t('assignment.view_detail')}
                   </button>
