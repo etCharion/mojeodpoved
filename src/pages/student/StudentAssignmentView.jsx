@@ -173,6 +173,19 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                         </button>
                       ))}
                     </div>
+                  ) : item.type === 'passfail' ? (
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id={`rubric-${item.id}`}
+                        checked={!!reviewForm.ratings[item.id]}
+                        onChange={(e) => setReviewForm(prev => ({ ...prev, ratings: { ...prev.ratings, [item.id]: e.target.checked } }))}
+                        className="w-6 h-6 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <label htmlFor={`rubric-${item.id}`} className="text-sm font-medium text-gray-600 cursor-pointer">
+                        {reviewForm.ratings[item.id] ? t('common.pass') : t('common.fail')}
+                      </label>
+                    </div>
                   ) : (
                     <div className="space-y-2">
                       {item.options.map((opt, i) => (

@@ -21,6 +21,8 @@ const resources = {
         waiting: 'Čekárna',
         completed: 'Dokončeno',
         pending: 'Čeká na vyřízení',
+        pass: 'Splněno',
+        fail: 'Nesplněno',
         home: 'Úvod',
         roles: {
           teacher: 'Učitel',
@@ -114,6 +116,7 @@ const resources = {
         grading_rubric: 'Hodnotící rubrika',
         add_stars: '+ Hodnocení hvězdičkami',
         add_choice: '+ Více možností',
+        add_passfail: '+ Splněno/Nesplněno',
         add_criterion: 'Přidejte alespoň jedno kritérium do rubriky.',
         question_placeholder: 'Zadejte otázku nebo kritérium...',
         option_placeholder: 'Možnost {{count}}',
@@ -201,6 +204,8 @@ const resources = {
         waiting: 'Waiting Room',
         completed: 'Completed',
         pending: 'Pending',
+        pass: 'Pass',
+        fail: 'Fail',
         home: 'Home',
         roles: {
           teacher: 'Teacher',
@@ -294,6 +299,7 @@ const resources = {
         grading_rubric: 'Grading Rubric',
         add_stars: '+ Stars Rating',
         add_choice: '+ Multiple Choice',
+        add_passfail: '+ Pass/Fail',
         add_criterion: 'Add at least one criterion to the rubric.',
         question_placeholder: 'Enter the question or criterion...',
         option_placeholder: 'Option {{count}}',
