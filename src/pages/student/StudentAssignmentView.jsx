@@ -1,18 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { collection, addDoc, doc, setDoc, updateDoc, serverTimestamp, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
-import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, RefreshCw, Users, BookOpen } from 'lucide-react';
+import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, RefreshCw, Users, BookOpen, ArrowLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
+import RubricDisplay from '../../components/RubricDisplay';
 import { runDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
 export default function StudentAssignmentView({ assignment, submissions, reviews }) {
   const { t } = useTranslation();
-  const { user, userData } = useAuth();
+  const { user } = useAuth();
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [activeReview, setActiveReview] = useState(null);
+  const [viewingReview, setViewingReview] = useState(null);
   const [reviewForm, setReviewForm] = useState({ ratings: {}, feedback: '' });
   const [metaReviewNotes, setMetaReviewNotes] = useState({});
 
@@ -218,6 +220,81 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     );
   }
 
+  if (viewingReview) {
+    // A review is "received" if the current user is the author of the work being reviewed
+    const isReceived = viewingReview.authorId === user.uid;
+
+    const targetSubmissionId = viewingReview.submissionId;
+    // For received reviews, show my own submission. For given reviews, show the peer's submission.
+    const targetSubmission = isReceived ? mySubmission : submissions.find(s => s.id === targetSubmissionId);
+
+    return (
+      <div className="max-w-4xl mx-auto space-y-8 pb-20">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-4">
+             <button onClick={() => setViewingReview(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <ArrowLeft className="w-6 h-6 text-gray-600" />
+             </button>
+             <div>
+                <h1 className="text-2xl font-bold">
+                  {isReceived ? t('assignment.review_received_detail') : t('assignment.review_given_detail')}
+                </h1>
+                <Breadcrumbs />
+             </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Submission and Instructions */}
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-xl border">
+               <h3 className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-2">{t('assignment.instructions')}</h3>
+               <p className="text-gray-600 text-sm italic">{assignment.description}</p>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl border">
+              <h3 className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-4">
+                {isReceived ? t('assignment.your_submission') : t('assignment.peer_submission')}
+              </h3>
+              <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">
+                {targetSubmission?.content?.text}
+              </div>
+            </div>
+          </div>
+
+          {/* Evaluation Details */}
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-xl border space-y-6">
+              <h3 className="text-lg font-bold">{t('assignment.rubric')}</h3>
+              <RubricDisplay rubric={assignment.rubric} ratings={viewingReview.ratings} />
+            </div>
+
+            <div className="bg-white p-6 rounded-xl border space-y-4">
+              <h3 className="text-lg font-bold">{t('assignment.feedback')}</h3>
+              <div className="bg-gray-50 p-4 rounded-lg text-gray-700 italic border border-dashed text-sm">
+                "{viewingReview.feedback}"
+              </div>
+            </div>
+
+            {viewingReview.agreement?.status && (
+              <div className="bg-white p-6 rounded-xl border space-y-4">
+                 <h3 className="text-sm font-bold text-gray-500 uppercase">{t('assignment.agreement_status')}</h3>
+                 <div className="flex items-center gap-2">
+                    <span className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${viewingReview.agreement.status === 'agree' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {viewingReview.agreement.status === 'agree' ? t('assignment.you_agreed') : t('assignment.you_disagreed')}
+                    </span>
+                    {viewingReview.agreement.note && (
+                      <span className="text-sm text-gray-500 italic">— "{viewingReview.agreement.note}"</span>
+                    )}
+                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Dashboard View
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -279,15 +356,25 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                       {rev.status === 'completed' ? `✓ ${t('common.completed')}` : t('common.pending')}
                     </p>
                   </div>
-                  {rev.status !== 'completed' && (
-                    <button
-                      onClick={() => setActiveReview(rev)}
-                      disabled={assignment.allowReviews === false}
-                      className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                    >
-                      {assignment.allowReviews === false ? t('common.status').replace('Status', 'Closed') : t('assignment.start_review')}
-                    </button>
-                  )}
+                  <div className="flex gap-2">
+                    {rev.status === 'completed' && (
+                      <button
+                        onClick={() => setViewingReview(rev)}
+                        className="text-indigo-600 border border-indigo-200 px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-indigo-50"
+                      >
+                        {t('assignment.view_detail')}
+                      </button>
+                    )}
+                    {rev.status !== 'completed' && (
+                      <button
+                        onClick={() => setActiveReview(rev)}
+                        disabled={assignment.allowReviews === false}
+                        className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                      >
+                        {assignment.allowReviews === false ? t('common.status').replace('Status', 'Closed') : t('assignment.start_review')}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
               {myReviewsGiven.length < reviewsNeeded && (
@@ -310,11 +397,16 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               <div key={rev.id} className="bg-white border rounded-xl p-6 shadow-sm space-y-4">
                 <div className="flex justify-between items-start">
                   <p className="text-sm font-bold text-gray-400 uppercase">{t('assignment.review_number', { count: i + 1 })}</p>
-                  <div className="flex text-yellow-400">
-                    {/* Just showing one star as indicator, or could average */}
-                    <Star className="w-4 h-4 fill-current" />
-                  </div>
+                  <button
+                    onClick={() => setViewingReview(rev)}
+                    className="text-xs font-bold text-indigo-600 hover:underline"
+                  >
+                    {t('assignment.view_detail')}
+                  </button>
                 </div>
+
+                <RubricDisplay rubric={assignment.rubric} ratings={rev.ratings} />
+
                 <p className="text-gray-700 italic text-sm border-l-4 border-indigo-100 pl-4 py-1">
                   "{rev.feedback}"
                 </p>
