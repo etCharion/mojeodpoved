@@ -2,9 +2,183 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { db } from '../../lib/firebase';
 import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { Plus, Trash2, ArrowLeft, Save } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, Save, GripVertical } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import { useTranslation } from 'react-i18next';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+function SortableOption({ id, value, optIdx, onUpdate, onRemove }) {
+  const { t } = useTranslation();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex gap-2 items-center group/opt">
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="text-gray-300 hover:text-indigo-400 cursor-grab active:cursor-grabbing"
+      >
+        <GripVertical className="w-4 h-4" />
+      </button>
+      <input
+        type="text"
+        required
+        placeholder={t('assignment.option_placeholder', { count: optIdx + 1 })}
+        value={value}
+        onChange={(e) => onUpdate(e.target.value)}
+        className="flex-1 px-3 py-1 text-sm border rounded bg-white outline-none focus:ring-1 focus:ring-indigo-500"
+      />
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-gray-300 hover:text-red-500 opacity-0 group-hover/opt:opacity-100 transition-opacity"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+function SortableRubricItem({ item, onRemove, onUpdate, onUpdateOption, onAddOption, onRemoveOption, onReorderOptions }) {
+  const { t } = useTranslation();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: item.id });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = item.options.findIndex((opt) => opt.id === active.id);
+      const newIndex = item.options.findIndex((opt) => opt.id === over.id);
+      onReorderOptions(item.id, oldIndex, newIndex);
+    }
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`p-4 border rounded-lg relative group bg-gray-50 ${isDragging ? 'shadow-lg border-indigo-300 ring-2 ring-indigo-100' : ''}`}
+    >
+      <div className="flex items-start gap-3">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="mt-1 text-gray-400 hover:text-indigo-600 cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical className="w-5 h-5" />
+        </button>
+
+        <div className="flex-1 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-indigo-600 uppercase bg-white px-2 py-0.5 rounded border">
+              {item.type}
+            </span>
+            <input
+              type="text"
+              required
+              placeholder={t('assignment.question_placeholder')}
+              value={item.question}
+              onChange={(e) => onUpdate(item.id, 'question', e.target.value)}
+              className="flex-1 bg-transparent font-medium outline-none border-b border-dashed focus:border-indigo-500"
+            />
+          </div>
+
+          {item.type === 'choice' && (
+            <div className="pl-6 space-y-2">
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={item.options.map(opt => opt.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {item.options.map((opt, optIdx) => (
+                    <SortableOption
+                      key={opt.id}
+                      id={opt.id}
+                      value={opt.value}
+                      optIdx={optIdx}
+                      onUpdate={(val) => onUpdateOption(item.id, opt.id, val)}
+                      onRemove={() => onRemoveOption(item.id, opt.id)}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+              <button
+                type="button"
+                onClick={() => onAddOption(item.id)}
+                className="text-xs text-indigo-600 font-medium hover:underline"
+              >
+                {t('assignment.add_option')}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onRemove(item.id)}
+          className="text-gray-400 hover:text-red-500 shrink-0"
+        >
+          <Trash2 className="w-5 h-5" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function AssignmentBuilder() {
   const { t } = useTranslation();
@@ -27,6 +201,13 @@ export default function AssignmentBuilder() {
     { id: '1', type: 'stars', question: 'Overall Quality' }
   ]);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   useEffect(() => {
     if (assignmentId) {
       const fetchAssignment = async () => {
@@ -43,7 +224,12 @@ export default function AssignmentBuilder() {
           setIsVisible(data.isVisible ?? true);
           setAllowSubmissions(data.allowSubmissions ?? true);
           setAllowReviews(data.allowReviews ?? true);
-          setRubric(data.rubric || []);
+          setRubric((data.rubric || []).map(item => ({
+            ...item,
+            options: (item.options || []).map((opt, idx) =>
+              typeof opt === 'string' ? { id: `legacy-${idx}-${Date.now()}`, value: opt } : opt
+            )
+          })));
         }
         setLoading(false);
       };
@@ -56,7 +242,10 @@ export default function AssignmentBuilder() {
       id: Date.now().toString(),
       type,
       question: '',
-      options: type === 'choice' ? ['', ''] : []
+      options: type === 'choice' ? [
+        { id: Date.now().toString() + '-0', value: '' },
+        { id: Date.now().toString() + '-1', value: '' }
+      ] : []
     };
     setRubric([...rubric, newItem]);
   };
@@ -67,11 +256,12 @@ export default function AssignmentBuilder() {
     ));
   };
 
-  const updateOption = (itemId, optIdx, value) => {
+  const updateOption = (itemId, optId, value) => {
     setRubric(rubric.map(item => {
       if (item.id === itemId) {
-        const newOpts = [...item.options];
-        newOpts[optIdx] = value;
+        const newOpts = item.options.map(opt =>
+          opt.id === optId ? { ...opt, value } : opt
+        );
         return { ...item, options: newOpts };
       }
       return item;
@@ -80,12 +270,43 @@ export default function AssignmentBuilder() {
 
   const addOption = (itemId) => {
     setRubric(rubric.map(item =>
-      item.id === itemId ? { ...item, options: [...item.options, ''] } : item
+      item.id === itemId ? { ...item, options: [...item.options, { id: Date.now().toString(), value: '' }] } : item
     ));
+  };
+
+  const removeOption = (itemId, optId) => {
+    setRubric(rubric.map(item => {
+      if (item.id === itemId) {
+        return { ...item, options: item.options.filter(opt => opt.id !== optId) };
+      }
+      return item;
+    }));
+  };
+
+  const handleReorderOptions = (itemId, oldIndex, newIndex) => {
+    setRubric(rubric.map(item => {
+      if (item.id === itemId) {
+        return { ...item, options: arrayMove(item.options, oldIndex, newIndex) };
+      }
+      return item;
+    }));
   };
 
   const removeRubricItem = (id) => {
     setRubric(rubric.filter(item => item.id !== id));
+  };
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setRubric((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -304,57 +525,29 @@ export default function AssignmentBuilder() {
           </div>
 
           <div className="space-y-4">
-            {rubric.map((item, idx) => (
-              <div key={item.id} className="p-4 border rounded-lg relative group bg-gray-50">
-                <button
-                  type="button"
-                  onClick={() => removeRubricItem(item.id)}
-                  className="absolute top-4 right-4 text-gray-400 hover:text-red-500"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-indigo-600 uppercase bg-white px-2 py-0.5 rounded border">
-                      {item.type}
-                    </span>
-                    <input
-                      type="text"
-                      required
-                      placeholder={t('assignment.question_placeholder')}
-                      value={item.question}
-                      onChange={(e) => updateRubricItem(item.id, 'question', e.target.value)}
-                      className="flex-1 bg-transparent font-medium outline-none border-b border-dashed focus:border-indigo-500"
-                    />
-                  </div>
-
-                  {item.type === 'choice' && (
-                    <div className="pl-6 space-y-2">
-                      {item.options.map((opt, optIdx) => (
-                        <div key={optIdx} className="flex gap-2">
-                          <input
-                            type="text"
-                            required
-                            placeholder={t('assignment.option_placeholder', { count: optIdx + 1 })}
-                            value={opt}
-                            onChange={(e) => updateOption(item.id, optIdx, e.target.value)}
-                            className="flex-1 px-3 py-1 text-sm border rounded bg-white outline-none focus:ring-1 focus:ring-indigo-500"
-                          />
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => addOption(item.id)}
-                        className="text-xs text-indigo-600 font-medium hover:underline"
-                      >
-                        {t('assignment.add_option')}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={rubric.map(item => item.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {rubric.map((item) => (
+                  <SortableRubricItem
+                    key={item.id}
+                    item={item}
+                    onRemove={removeRubricItem}
+                    onUpdate={updateRubricItem}
+                    onUpdateOption={updateOption}
+                    onAddOption={addOption}
+                    onRemoveOption={removeOption}
+                    onReorderOptions={handleReorderOptions}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
             {rubric.length === 0 && (
               <p className="text-center py-8 text-gray-400 italic">{t('assignment.add_criterion')}</p>
             )}
