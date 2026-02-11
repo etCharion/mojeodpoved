@@ -38,6 +38,7 @@ export default function RubricDisplay({ rubric, ratings }) {
               <div className="grid grid-cols-1 gap-1.5">
                 {item.options?.map((opt, idx) => {
                   const isSelected = val === (idx + 1);
+                  const text = typeof opt === 'string' ? opt : opt.value;
                   return (
                     <div
                       key={idx}
@@ -47,7 +48,7 @@ export default function RubricDisplay({ rubric, ratings }) {
                           : 'bg-white border-gray-100 text-gray-500'
                       }`}
                     >
-                      {opt}
+                      {text}
                     </div>
                   );
                 })}

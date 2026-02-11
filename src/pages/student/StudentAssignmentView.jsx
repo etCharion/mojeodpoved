@@ -188,19 +188,22 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {item.options.map((opt, i) => (
-                        <label key={i} className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                          <input
-                            type="radio"
-                            name={`rubric-${item.id}`}
-                            value={i + 1}
-                            checked={reviewForm.ratings[item.id] === (i + 1)}
-                            onChange={() => setReviewForm(prev => ({ ...prev, ratings: { ...prev.ratings, [item.id]: (i + 1) } }))}
-                            className="w-4 h-4 text-indigo-600"
-                          />
-                          <span className="text-sm">{opt}</span>
-                        </label>
-                      ))}
+                      {item.options.map((opt, i) => {
+                        const text = typeof opt === 'string' ? opt : opt.value;
+                        return (
+                          <label key={i} className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                            <input
+                              type="radio"
+                              name={`rubric-${item.id}`}
+                              value={i + 1}
+                              checked={reviewForm.ratings[item.id] === (i + 1)}
+                              onChange={() => setReviewForm(prev => ({ ...prev, ratings: { ...prev.ratings, [item.id]: (i + 1) } }))}
+                              className="w-4 h-4 text-indigo-600"
+                            />
+                            <span className="text-sm">{text}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
