@@ -62,6 +62,7 @@ const resources = {
         enrolled_students: 'Zapsaní studenti',
         no_students: 'Žádní studenti nejsou zapsáni.',
         link_copied: 'Odkaz pro připojení byl zkopírován do schránky!',
+        remove_confirm: 'Opravdu chcete odebrat studenta {{email}} ze třídy?',
       },
       assignment: {
         monitoring: 'Monitorovací panel učitele',
@@ -219,6 +220,7 @@ const resources = {
         enrolled_students: 'Enrolled',
         no_students: 'No students enrolled.',
         link_copied: 'Join link copied to clipboard!',
+        remove_confirm: 'Are you sure you want to remove student {{email}} from the class?',
       },
       assignment: {
         monitoring: 'Teacher Monitoring Dashboard',

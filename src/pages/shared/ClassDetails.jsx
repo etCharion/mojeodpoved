@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot, collection, query, where, updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Users, BookOpen, Plus, Check, X, Clipboard, ExternalLink } from 'lucide-react';
+import { doc, onSnapshot, collection, query, where, updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { Users, BookOpen, Plus, Check, X, Clipboard, ExternalLink, Trash2 } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import { useTranslation } from 'react-i18next';
 
@@ -60,8 +60,34 @@ export default function ClassDetails() {
     });
   };
 
+  const handleRemoveStudent = async (email) => {
+    if (!window.confirm(t('class.remove_confirm', { email }))) return;
+
+    try {
+      // 1. Remove from studentEmails
+      await updateDoc(doc(db, 'classes', classId), {
+        studentEmails: arrayRemove(email)
+      });
+
+      // 2. Try to find the UID to remove from studentUids
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', email));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const studentUid = querySnapshot.docs[0].id;
+        await updateDoc(doc(db, 'classes', classId), {
+          studentUids: arrayRemove(studentUid)
+        });
+      }
+    } catch (err) {
+      console.error("Error removing student:", err);
+    }
+  };
+
   const copyJoinLink = () => {
-    const link = `${window.location.origin}/join/${classId}`;
+    const baseUrl = import.meta.env.BASE_URL;
+    const link = `${window.location.origin}${baseUrl}${baseUrl.endsWith('/') ? '' : '/'}join/${classId}`;
     navigator.clipboard.writeText(link);
     alert(t('class.link_copied'));
   };
@@ -195,8 +221,15 @@ export default function ClassDetails() {
                 <h3 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider">{t('class.enrolled_students')}</h3>
                 <div className="space-y-1 max-h-64 overflow-y-auto">
                   {classInfo.studentEmails?.map((email, idx) => (
-                    <div key={idx} className="text-sm text-gray-600 py-1 border-b last:border-0 truncate">
-                      {email}
+                    <div key={idx} className="flex items-center justify-between py-1 border-b last:border-0 group">
+                      <span className="text-sm text-gray-600 truncate">{email}</span>
+                      <button
+                        onClick={() => handleRemoveStudent(email)}
+                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        title={t('common.delete')}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   ))}
                   {(!classInfo.studentEmails || classInfo.studentEmails.length === 0) && (

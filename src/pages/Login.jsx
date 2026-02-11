@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 const Login = () => {
   const { user, userData, loginWithGoogle } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { t, i18n } = useTranslation();
 
   const toggleLanguage = () => {
@@ -14,8 +16,16 @@ const Login = () => {
 
   const currentFlag = i18n.language.startsWith('cs') ? '🇨🇿' : '🇺🇸';
 
+  const from = location.state?.from || (userData?.role === 'teacher' ? '/teacher' : '/student');
+
+  useEffect(() => {
+    if (user && userData) {
+      navigate(from, { replace: true });
+    }
+  }, [user, userData, navigate, from]);
+
   if (user && userData) {
-    return <Navigate to={userData.role === 'teacher' ? '/teacher' : '/student'} />;
+    return null;
   }
 
   return (

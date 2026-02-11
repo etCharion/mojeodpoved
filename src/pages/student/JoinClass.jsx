@@ -33,11 +33,12 @@ export default function JoinClass() {
         setClassName(classData.name);
 
         const email = user.email.toLowerCase();
+        const isEnrolled = classData.studentUids?.includes(user.uid);
         const isPreApproved = classData.studentEmails?.includes(email);
 
-        if (isPreApproved) {
+        if (isEnrolled || isPreApproved) {
           // Add to studentUids if not already there
-          if (!classData.studentUids?.includes(user.uid)) {
+          if (!isEnrolled) {
             await updateDoc(classRef, {
               studentUids: arrayUnion(user.uid)
             });
