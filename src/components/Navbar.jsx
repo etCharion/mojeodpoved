@@ -109,60 +109,6 @@ const Navbar = () => {
         <div className="flex items-center gap-2 sm:gap-4 md:gap-6">
           {userData?.role === 'student' && (
             <>
-              {/* Notifications Icon */}
-              <div className="relative" ref={notifRef}>
-                <button
-                  onClick={() => {
-                    setShowNotifDropdown(!showNotifDropdown);
-                    setShowJoinDropdown(false);
-                  }}
-                  className={`p-2 rounded-lg border transition-colors relative ${showNotifDropdown ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'hover:bg-gray-50 text-gray-600'}`}
-                  title={t('navbar.notifications')}
-                >
-                  <Bell className="w-5 h-5" />
-                  {preApprovedClasses.length > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
-                      {preApprovedClasses.length}
-                    </span>
-                  )}
-                </button>
-
-                {showNotifDropdown && (
-                  <div className="absolute right-0 mt-2 w-72 bg-white border rounded-xl shadow-xl overflow-hidden z-50">
-                    <div className="p-4 border-b bg-gray-50">
-                      <h3 className="font-semibold text-gray-900">{t('navbar.notifications')}</h3>
-                    </div>
-                    <div className="max-h-96 overflow-y-auto">
-                      {preApprovedClasses.length === 0 && pendingClasses.length === 0 ? (
-                        <div className="p-8 text-center text-gray-500 text-sm">
-                          {t('navbar.no_notifications')}
-                        </div>
-                      ) : (
-                        <div className="divide-y">
-                          {preApprovedClasses.map(cls => (
-                            <Link
-                              key={cls.id}
-                              to={`/join/${cls.id}`}
-                              onClick={() => setShowNotifDropdown(false)}
-                              className="block p-4 hover:bg-indigo-50 transition-colors"
-                            >
-                              <p className="text-sm font-medium text-gray-900">{cls.name}</p>
-                              <p className="text-xs text-indigo-600 mt-1">{t('navbar.pre_approved_available')}</p>
-                            </Link>
-                          ))}
-                          {pendingClasses.map(cls => (
-                            <div key={cls.id} className="p-4 bg-gray-50/50">
-                              <p className="text-sm font-medium text-gray-700">{cls.name}</p>
-                              <p className="text-xs text-orange-600 mt-1">{t('navbar.pending_approval')}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
               {/* Join Class Icon */}
               <div className="relative" ref={joinRef}>
                 <button
@@ -227,6 +173,60 @@ const Navbar = () => {
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+
+              {/* Notifications Icon */}
+              <div className="relative" ref={notifRef}>
+                <button
+                  onClick={() => {
+                    setShowNotifDropdown(!showNotifDropdown);
+                    setShowJoinDropdown(false);
+                  }}
+                  className={`p-2 rounded-lg border transition-colors relative ${showNotifDropdown ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'hover:bg-gray-50 text-gray-600'}`}
+                  title={t('navbar.notifications')}
+                >
+                  <Bell className="w-5 h-5" />
+                  {preApprovedClasses.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                      {preApprovedClasses.length}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifDropdown && (
+                  <div className="absolute right-0 mt-2 w-72 bg-white border rounded-xl shadow-xl overflow-hidden z-50">
+                    <div className="p-4 border-b bg-gray-50">
+                      <h3 className="font-semibold text-gray-900">{t('navbar.notifications')}</h3>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {preApprovedClasses.length === 0 && pendingClasses.length === 0 ? (
+                        <div className="p-8 text-center text-gray-500 text-sm">
+                          {t('navbar.no_notifications')}
+                        </div>
+                      ) : (
+                        <div className="divide-y">
+                          {preApprovedClasses.map(cls => (
+                            <Link
+                              key={cls.id}
+                              to={`/join/${cls.id}`}
+                              onClick={() => setShowNotifDropdown(false)}
+                              className="block p-4 hover:bg-indigo-50 transition-colors"
+                            >
+                              <p className="text-sm font-medium text-gray-900">{cls.name}</p>
+                              <p className="text-xs text-indigo-600 mt-1">{t('navbar.pre_approved_available')}</p>
+                            </Link>
+                          ))}
+                          {pendingClasses.map(cls => (
+                            <div key={cls.id} className="p-4 bg-gray-50/50">
+                              <p className="text-sm font-medium text-gray-700">{cls.name}</p>
+                              <p className="text-xs text-orange-600 mt-1">{t('navbar.pending_approval')}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
