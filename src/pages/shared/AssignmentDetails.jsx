@@ -7,6 +7,7 @@ import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, Refres
 import StudentAssignmentView from '../student/StudentAssignmentView';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
+import { RichTextRenderer } from '../../components/RichTextEditor';
 import { runDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
@@ -509,9 +510,9 @@ export default function AssignmentDetails() {
                       )}
                     </div>
                     {!isExpanded && (
-                      <p className="text-xs text-gray-500 italic truncate max-w-2xl">
-                        "{review.feedback}"
-                      </p>
+                      <div className="text-xs text-gray-500 italic truncate max-w-2xl">
+                        {review.feedback?.replace(/<[^>]*>/g, '')}
+                      </div>
                     )}
                   </div>
 
@@ -534,8 +535,12 @@ export default function AssignmentDetails() {
                   <div className="px-6 pb-6 pt-2 border-t border-indigo-100/50 bg-indigo-50/10">
                     <div className="mt-4 p-4 bg-white rounded-xl border border-indigo-100 shadow-sm">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">{t('assignment.original_text')}</p>
-                      <div className="text-sm text-gray-600 whitespace-pre-wrap italic leading-relaxed">
-                        {authorSubmission?.content?.text || <span className="text-gray-400">{t('common.none')}</span>}
+                      <div className="text-sm text-gray-600 italic leading-relaxed">
+                        {review.highlightedSubmission ? (
+                          <RichTextRenderer content={review.highlightedSubmission} />
+                        ) : (
+                          <div className="whitespace-pre-wrap">{authorSubmission?.content?.text || <span className="text-gray-400">{t('common.none')}</span>}</div>
+                        )}
                       </div>
                     </div>
 
@@ -546,9 +551,9 @@ export default function AssignmentDetails() {
                       </div>
                       <div className="space-y-4">
                         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('assignment.feedback')}</p>
-                        <div className="bg-white p-4 rounded-xl text-sm text-gray-700 border italic shadow-sm relative">
+                        <div className="bg-white p-4 rounded-xl text-sm text-gray-700 border shadow-sm relative">
                           <MessageSquare className="absolute -top-3 -left-3 w-6 h-6 text-indigo-100 fill-current" />
-                          {review.feedback}
+                          <RichTextRenderer content={review.feedback} />
                         </div>
                         {review.agreement?.status && (
                           <div className="p-3 rounded-lg border bg-white shadow-sm space-y-2">

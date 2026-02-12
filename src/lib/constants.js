@@ -19,3 +19,12 @@ export const CLASS_ICONS = [
   'BookOpen', 'GraduationCap', 'Beaker', 'Calculator', 'Globe', 'Music', 'Palette',
   'FlaskConical', 'Languages', 'Microscope', 'Binary', 'Pi', 'Sigma', 'Brain'
 ];
+
+export const HIGHLIGHTER_COLORS = [
+  { id: 'yellow', color: '#fef08a', label: 'Yellow' },
+  { id: 'green', color: '#bbf7d0', label: 'Green' },
+  { id: 'blue', color: '#bfdbfe', label: 'Blue' },
+  { id: 'pink', color: '#fbcfe8', label: 'Pink' },
+  { id: 'orange', color: '#fed7aa', label: 'Orange' },
+  { id: 'purple', color: '#e9d5ff', label: 'Purple' },
+];

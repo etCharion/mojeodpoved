@@ -190,6 +190,13 @@ const resources = {
         review_received_detail: 'Detail obdržené recenze',
         agreement_status: 'Stav souhlasu',
       },
+      editor: {
+        bold: 'Tučně',
+        italic: 'Kurzíva',
+        underline: 'Podtržené',
+        no_highlight: 'Zrušit zvýrazňování',
+        eraser: 'Guma',
+      },
       join: {
         joining: 'Připojování ke třídě...',
         success_title: 'Úspěšně připojeno!',
@@ -389,6 +396,13 @@ const resources = {
         review_given_detail: 'Your Submitted Review Detail',
         review_received_detail: 'Received Review Detail',
         agreement_status: 'Agreement Status',
+      },
+      editor: {
+        bold: 'Bold',
+        italic: 'Italic',
+        underline: 'Underline',
+        no_highlight: 'Stop Highlighting',
+        eraser: 'Eraser',
       },
       join: {
         joining: 'Joining class...',
