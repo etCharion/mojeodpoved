@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, RefreshCw, Users, BookOpen, ArrowLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
@@ -22,7 +22,32 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const myReviewsGiven = reviews.filter(r => r.reviewerId === user.uid);
   const myReviewsReceived = reviews.filter(r => r.authorId === user.uid && r.status === 'completed');
 
-  const canReview = submissions.length >= assignment.review_start_threshold;
+  useEffect(() => {
+    const createPlaceholder = async () => {
+      // Only create placeholder for students if it doesn't exist yet
+      if (user && assignment && !mySubmission && assignment.allowSubmissions !== false) {
+        const subId = `${assignment.id}_${user.uid}`;
+        try {
+          await setDoc(doc(db, 'submissions', subId), {
+            assignmentId: assignment.id,
+            classId: assignment.classId,
+            studentId: user.uid,
+            studentName: user.displayName || 'Student',
+            status: 'expected',
+            reviewCount: 0,
+            assignedCount: 0,
+            createdAt: serverTimestamp()
+          }, { merge: true });
+        } catch (err) {
+          console.error("Placeholder error:", err);
+        }
+      }
+    };
+    createPlaceholder();
+  }, [user, assignment, !!mySubmission]);
+
+  const submittedCount = submissions.filter(s => s.status !== 'expected').length;
+  const canReview = submittedCount >= assignment.review_start_threshold;
   const reviewsNeeded = assignment.reviews_per_submission;
   const reviewsCompleted = myReviewsGiven.filter(r => r.status === 'completed').length;
 
@@ -31,16 +56,16 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     if (!text.trim()) return;
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'submissions'), {
+      const subId = `${assignment.id}_${user.uid}`;
+      await setDoc(doc(db, 'submissions', subId), {
         assignmentId: assignment.id,
         classId: assignment.classId,
         studentId: user.uid,
         studentName: user.displayName,
         content: { text },
-        reviewCount: 0,
-        assignedCount: 0,
-        createdAt: serverTimestamp()
-      });
+        status: 'submitted',
+        updatedAt: serverTimestamp()
+      }, { merge: true });
 
       // Trigger distribution logic
       await runDistribution(assignment.id);
@@ -72,6 +97,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       await updateDoc(subRef, {
         reviewCount: (submissions.find(s => s.id === activeReview.submissionId)?.reviewCount || 0) + 1
       });
+
+      // Trigger next review assignment
+      await runDistribution(assignment.id);
 
       setActiveReview(null);
       setReviewForm({ ratings: {}, feedback: '' });
@@ -363,7 +391,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               <div>
                 <p className="font-bold">{t('assignment.waiting_room')}</p>
                 <p className="text-sm opacity-90">
-                  {t('assignment.waiting_room_desc', { count: assignment.review_start_threshold, current: submissions.length })}
+                  {t('assignment.waiting_room_desc', { count: assignment.review_start_threshold, current: submittedCount })}
                 </p>
               </div>
             </div>

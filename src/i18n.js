@@ -110,6 +110,9 @@ const resources = {
         agreed_by_author: 'AUTOR SOUHLASÍ',
         disagreed_by_author: 'AUTOR NESOUHLASÍ',
         delete_review_confirm: 'Opravdu chcete smazat tuto recenzi?',
+        delete_submission_confirm: 'Opravdu chcete smazat toto odevzdání (včetně všech jeho recenzí)?',
+        status_expected: 'Očekáváno',
+        status_submitted: 'Odevzdáno',
 
         // Settings/Builder
         basic_info: 'Základní informace',
@@ -119,6 +122,8 @@ const resources = {
         peer_review_config: 'Konfigurace peer review',
         reviews_per_student: 'Počet recenzí na studenta (N)',
         min_submissions: 'Min. odevzdání pro začátek (M)',
+        expected_count: 'Očekávaný počet prací',
+        expected_count_desc: 'Pokud není vyplněno, použije se počet studentů, kteří úkol otevřeli.',
         mandatory_feedback: 'Povinná zpětná vazba',
         require_comments: 'Vyžadovat, aby studenti psali komentáře',
         min_char_count: 'Minimální počet znaků',
@@ -302,6 +307,9 @@ const resources = {
         agreed_by_author: 'AGREED BY AUTHOR',
         disagreed_by_author: 'DISAGREED BY AUTHOR',
         delete_review_confirm: 'Are you sure you want to delete this review?',
+        delete_submission_confirm: 'Are you sure you want to delete this submission (including all its reviews)?',
+        status_expected: 'Expected',
+        status_submitted: 'Submitted',
 
         // Settings/Builder
         basic_info: 'Basic Information',
@@ -311,6 +319,8 @@ const resources = {
         peer_review_config: 'Peer Review Configuration',
         reviews_per_student: 'Reviews per Student (N)',
         min_submissions: 'Min Submissions to Start (M)',
+        expected_count: 'Expected number of submissions',
+        expected_count_desc: 'If empty, it counts students who opened the task.',
         mandatory_feedback: 'Mandatory Feedback',
         require_comments: 'Require students to write comments',
         min_char_count: 'Minimum Character Count',

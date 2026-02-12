@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot, collection, query, where, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send, ChevronDown, ChevronUp, ArrowUpDown, CheckCircle2, XCircle } from 'lucide-react';
+import { doc, onSnapshot, collection, query, where, updateDoc, deleteDoc, getDocs, serverTimestamp } from 'firebase/firestore';
+import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send, ChevronDown, ChevronUp, ArrowUpDown, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import StudentAssignmentView from '../student/StudentAssignmentView';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
@@ -51,11 +51,38 @@ export default function AssignmentDetails() {
     await deleteDoc(doc(db, 'reviews', reviewId));
   };
 
+  const handleDeleteSubmission = async (sub) => {
+    if (!window.confirm(t('assignment.delete_submission_confirm'))) return;
+    try {
+      // Delete reviews where this submission is the target
+      const q1 = query(collection(db, 'reviews'), where('submissionId', '==', sub.id));
+      const snap1 = await getDocs(q1);
+
+      // Delete reviews where this student is the reviewer
+      const q2 = query(collection(db, 'reviews'), where('reviewerId', '==', sub.studentId), where('assignmentId', '==', assignmentId));
+      const snap2 = await getDocs(q2);
+
+      const deletePromises = [
+        ...snap1.docs.map(d => deleteDoc(d.ref)),
+        ...snap2.docs.map(d => deleteDoc(d.ref)),
+        deleteDoc(doc(db, 'submissions', sub.id))
+      ];
+
+      await Promise.all(deletePromises);
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting submission");
+    }
+  };
+
   const toggleField = async (field, value) => {
     await updateDoc(doc(db, 'assignments', assignmentId), {
       [field]: value,
       updatedAt: serverTimestamp()
     });
+    if (field === 'allowSubmissions' && value === false) {
+      await runDistribution(assignmentId);
+    }
   };
 
   if (loading) return <div>{t('common.loading')}</div>;
@@ -156,7 +183,10 @@ export default function AssignmentDetails() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-xl border">
           <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t('assignment.submissions')}</p>
-          <p className="text-4xl font-bold mt-2">{submissions.length}</p>
+          <p className="text-4xl font-bold mt-2">
+            {submissions.filter(s => s.status !== 'expected').length}
+            <span className="text-xl text-gray-400 font-normal"> / {assignment.expected_submissions || submissions.length}</span>
+          </p>
           <p className="text-sm text-gray-400 mt-1">{t('assignment.goal', { count: assignment.review_start_threshold })}</p>
         </div>
         <div className="bg-white p-6 rounded-xl border">
@@ -205,18 +235,30 @@ export default function AssignmentDetails() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {submissions.map((sub) => {
+              {submissions.sort((a, b) => {
+                if (a.status === 'expected' && b.status !== 'expected') return 1;
+                if (a.status !== 'expected' && b.status === 'expected') return -1;
+                return (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0);
+              }).map((sub) => {
                 const subReviews = reviews.filter(r => r.submissionId === sub.id);
+                const isExpected = sub.status === 'expected';
+
                 return (
-                  <tr key={sub.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={sub.id} className="hover:bg-gray-50 transition-colors group">
                     <td className="px-6 py-4">
                       <div className="font-medium text-gray-900">{sub.studentName}</div>
-                      <div className="text-xs text-gray-400">{sub.id}</div>
+                      <div className="text-xs text-gray-400">{sub.studentId}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="max-w-xs truncate text-sm text-gray-600 italic">
-                        "{sub.content?.text?.substring(0, 50)}..."
-                      </div>
+                      {isExpected ? (
+                        <div className="text-sm text-gray-400 italic flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> {t('assignment.status_expected')}
+                        </div>
+                      ) : (
+                        <div className="max-w-xs truncate text-sm text-gray-600 italic">
+                          "{sub.content?.text?.substring(0, 50)}..."
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-1">
@@ -227,11 +269,25 @@ export default function AssignmentDetails() {
                             className={`w-3 h-3 rounded-full ${r.status === 'completed' ? 'bg-green-500' : 'bg-gray-300'}`}
                           ></div>
                         ))}
-                        {subReviews.length === 0 && <span className="text-gray-400 text-xs italic">None yet</span>}
+                        {subReviews.length === 0 && !isExpected && <span className="text-gray-400 text-xs italic">None yet</span>}
+                        {isExpected && <span className="text-gray-300 text-xs">—</span>}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">{t('assignment.work_submitted')}</span>
+                      <div className="flex items-center justify-between">
+                        {isExpected ? (
+                          <span className="text-sm font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded">{t('assignment.status_expected')}</span>
+                        ) : (
+                          <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">{t('assignment.status_submitted')}</span>
+                        )}
+                        <button
+                          onClick={() => handleDeleteSubmission(sub)}
+                          className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                          title={t('common.delete')}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
