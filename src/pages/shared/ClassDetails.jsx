@@ -2,11 +2,151 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot, collection, query, where, updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
-import { Users, BookOpen, Plus, Check, X, Clipboard, ExternalLink, Trash2, QrCode } from 'lucide-react';
+import { doc, onSnapshot, collection, query, where, updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, getDocs, setDoc, getDoc } from 'firebase/firestore';
+import { Users, BookOpen, Plus, Check, X, Clipboard, ExternalLink, Trash2, QrCode, Settings } from 'lucide-react';
+import * as AllIcons from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import { useTranslation } from 'react-i18next';
+import { CLASS_COLORS, CLASS_ICONS } from '../../lib/constants';
+
+function ClassSettingsModal({ classInfo, onClose, isTeacher, user, t }) {
+  const [name, setName] = useState(classInfo.name);
+  const [selectedColor, setSelectedColor] = useState(classInfo.color || 'indigo');
+  const [selectedIcon, setSelectedIcon] = useState(classInfo.icon || 'BookOpen');
+  const [personalSettings, setPersonalSettings] = useState({ color: '', icon: '' });
+
+  useEffect(() => {
+    const fetchPersonal = async () => {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists()) {
+        const settings = userDoc.data().classSettings?.[classInfo.id] || {};
+        setPersonalSettings(settings);
+        if (settings.color) setSelectedColor(settings.color);
+        if (settings.icon) setSelectedIcon(settings.icon);
+      }
+    };
+    fetchPersonal();
+  }, [user.uid, classInfo.id]);
+
+  const handleSave = async () => {
+    try {
+      // Save personal settings
+      const userRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userRef);
+      const currentSettings = userDoc.exists() ? (userDoc.data().classSettings || {}) : {};
+
+      await updateDoc(userRef, {
+        [`classSettings.${classInfo.id}`]: {
+          color: selectedColor,
+          icon: selectedIcon
+        }
+      });
+
+      // If teacher, also update class defaults
+      if (isTeacher) {
+        await updateDoc(doc(db, 'classes', classInfo.id), {
+          name,
+          color: selectedColor,
+          icon: selectedIcon
+        });
+      }
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert(t('assignment.error_saving'));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-xl my-8">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">{t('common.settings')}</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            <X className="w-6 h-6 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          {isTeacher && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                {t('assignment.title_label')}
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-shadow"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-3">
+              {t('class.icon')}
+            </label>
+            <div className="grid grid-cols-7 gap-2">
+              {CLASS_ICONS.map((iconName) => {
+                const IconComp = AllIcons[iconName] || BookOpen;
+                return (
+                  <button
+                    key={iconName}
+                    onClick={() => setSelectedIcon(iconName)}
+                    className={`p-2 rounded-lg border transition-all ${
+                      selectedIcon === iconName
+                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-md scale-110'
+                        : 'bg-gray-50 border-gray-100 text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <IconComp className="w-5 h-5 mx-auto" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-3">
+              {t('class.color')}
+            </label>
+            <div className="grid grid-cols-7 gap-2">
+              {Object.entries(CLASS_COLORS).map(([key, config]) => (
+                <button
+                  key={key}
+                  onClick={() => setSelectedColor(key)}
+                  className={`w-10 h-10 rounded-full border-4 transition-all flex items-center justify-center ${
+                    selectedColor === key
+                      ? 'border-gray-900 scale-110 shadow-sm'
+                      : 'border-transparent hover:scale-105'
+                  } ${config.bg}`}
+                >
+                  {selectedColor === key && <Check className={`w-5 h-5 ${config.text}`} />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              onClick={onClose}
+              className="px-6 py-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors font-medium"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-8 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-md font-bold"
+            >
+              {t('common.save')}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ClassDetails() {
   const { t } = useTranslation();
@@ -17,6 +157,7 @@ export default function ClassDetails() {
   const [newStudentEmail, setNewStudentEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   useEffect(() => {
     if (!classId) return;
@@ -127,15 +268,24 @@ export default function ClassDetails() {
           <p className="text-gray-500 mb-1">{t('class.management')}</p>
           <Breadcrumbs />
         </div>
-        {isTeacher && (
-          <Link
-            to={`/teacher/assignment/new?classId=${classId}`}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSettingsModal(true)}
+            className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+            title={t('common.settings')}
           >
-            <Plus className="w-5 h-5" />
-            <span>{t('class.new_assignment')}</span>
-          </Link>
-        )}
+            <Settings className="w-6 h-6" />
+          </button>
+          {isTeacher && (
+            <Link
+              to={`/teacher/assignment/new?classId=${classId}`}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              <span>{t('class.new_assignment')}</span>
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -286,6 +436,17 @@ export default function ClassDetails() {
           </div>
         )}
       </div>
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <ClassSettingsModal
+          classInfo={classInfo}
+          onClose={() => setShowSettingsModal(false)}
+          isTeacher={isTeacher}
+          user={user}
+          t={t}
+        />
+      )}
 
       {/* QR Code Modal */}
       {showQRModal && (

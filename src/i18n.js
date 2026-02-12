@@ -24,6 +24,7 @@ const resources = {
         pass: 'Splněno',
         fail: 'Nesplněno',
         home: 'Úvod',
+        settings: 'Nastavení',
         roles: {
           teacher: 'Učitel',
           student: 'Student',
@@ -80,6 +81,8 @@ const resources = {
         join_code: 'Kód pro připojení',
         qr_code: 'QR kód',
         fullscreen_qr: 'Zvětšit na celou obrazovku',
+        color: 'Barva',
+        icon: 'Ikona',
       },
       assignment: {
         monitoring: 'Monitorovací panel učitele',
@@ -213,6 +216,7 @@ const resources = {
         pass: 'Pass',
         fail: 'Fail',
         home: 'Home',
+        settings: 'Settings',
         roles: {
           teacher: 'Teacher',
           student: 'Student',
@@ -269,6 +273,8 @@ const resources = {
         join_code: 'Join Code',
         qr_code: 'QR Code',
         fullscreen_qr: 'Fullscreen',
+        color: 'Color',
+        icon: 'Icon',
       },
       assignment: {
         monitoring: 'Teacher Monitoring Dashboard',
