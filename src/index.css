@@ -5,6 +5,26 @@
   --color-secondary: #64748b;
 }
 
+/* Tiptap / Highlighter styles */
+.ProseMirror ::selection {
+  background-color: var(--selection-color, #bfdbfe);
+}
+
+.ProseMirror mark {
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* Ensure placeholder is visible */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #adb5bd;
+  pointer-events: none;
+  height: 0;
+}
+
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
 }

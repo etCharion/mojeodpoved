@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { EditorContent } from '@tiptap/react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
 import { collection, addDoc, doc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, RefreshCw, Users, BookOpen, ArrowLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
+import { useRichTextEditor, EditorToolbar, RichTextRenderer } from '../../components/RichTextEditor';
 import { runDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
@@ -16,8 +18,43 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const [activeReview, setActiveReview] = useState(null);
   const [viewingReview, setViewingReview] = useState(null);
   const [reviewForm, setReviewForm] = useState({ ratings: {}, feedback: '' });
+  const [highlightedSubmission, setHighlightedSubmission] = useState('');
+  const [activeColor, setActiveColor] = useState(null);
+  const [isEraserActive, setIsEraserActive] = useState(false);
   const [hoveredRatings, setHoveredRatings] = useState({});
   const [metaReviewNotes, setMetaReviewNotes] = useState({});
+
+  // Tiptap editors for review mode
+  const submissionEditor = useRichTextEditor({
+    content: highlightedSubmission,
+    onChange: setHighlightedSubmission,
+    activeColor,
+    isEraserActive,
+    highlightOnly: true,
+    className: 'p-4 min-h-[200px]'
+  });
+
+  const feedbackEditor = useRichTextEditor({
+    content: reviewForm.feedback,
+    onChange: (html) => setReviewForm(prev => ({ ...prev, feedback: html })),
+    activeColor,
+    isEraserActive,
+    className: 'p-4 min-h-[150px]'
+  });
+
+  // Reset editors when active review changes
+  useEffect(() => {
+    if (activeReview) {
+      const targetSub = submissions.find(s => s.id === activeReview.submissionId);
+      const initialContent = targetSub?.content?.text || '';
+      // Wrap plain text in <p> if it's not HTML
+      const htmlContent = initialContent.startsWith('<') ? initialContent : `<p>${initialContent}</p>`;
+      setHighlightedSubmission(htmlContent);
+      setReviewForm({ ratings: {}, feedback: '' });
+      setActiveColor(null);
+      setIsEraserActive(false);
+    }
+  }, [activeReview?.id]);
 
   const mySubmission = submissions.find(s => s.studentId === user.uid);
   const myReviewsGiven = reviews.filter(r => r.reviewerId === user.uid);
@@ -80,8 +117,14 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
-    if (assignment.mandatory_feedback && reviewForm.feedback.length < assignment.min_char_count) {
-      alert(t('assignment.char_required').replace('{{current}}', reviewForm.feedback.length).replace('{{min}}', assignment.min_char_count));
+
+    // For validation, we might want to strip HTML tags to count real characters
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = reviewForm.feedback;
+    const plainFeedback = tempDiv.textContent || tempDiv.innerText || '';
+
+    if (assignment.mandatory_feedback && plainFeedback.length < assignment.min_char_count) {
+      alert(t('assignment.char_required').replace('{{current}}', plainFeedback.length).replace('{{min}}', assignment.min_char_count));
       return;
     }
 
@@ -90,6 +133,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
         status: 'completed',
         ratings: reviewForm.ratings,
         feedback: reviewForm.feedback,
+        highlightedSubmission: highlightedSubmission,
         completedAt: serverTimestamp()
       });
 
@@ -162,9 +206,11 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
   // If in review mode
   if (activeReview) {
-    const targetSubmission = submissions.find(s => s.id === activeReview.submissionId);
     return (
-      <div className="space-y-8 pb-20">
+      <div className="space-y-8 pb-20" style={{
+        '--selection-color': isEraserActive ? '#cbd5e1' : (activeColor || '#bfdbfe'),
+        '--highlight-color': activeColor || 'transparent'
+      }}>
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold">{t('assignment.reviewing_peer')}</h1>
@@ -173,12 +219,24 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           <button onClick={() => setActiveReview(null)} className="text-gray-500 hover:underline">{t('common.cancel')}</button>
         </div>
 
+        <div className="bg-white border rounded-xl overflow-hidden shadow-sm sticky top-4 z-30">
+          <EditorToolbar
+            editors={[submissionEditor, feedbackEditor]}
+            activeColor={activeColor}
+            setActiveColor={setActiveColor}
+            isEraserActive={isEraserActive}
+            setIsEraserActive={setIsEraserActive}
+          />
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Peer Work */}
-          <div className="bg-white p-6 rounded-xl border h-fit sticky top-4">
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">{t('assignment.peer_submission')}</h3>
-            <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">
-              {targetSubmission?.content?.text}
+          <div className="bg-white rounded-xl border h-fit lg:sticky lg:top-24 overflow-hidden">
+            <div className="p-4 border-b bg-gray-50">
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">{t('assignment.peer_submission')}</h3>
+            </div>
+            <div className="p-2">
+               <EditorContent editor={submissionEditor} />
             </div>
           </div>
 
@@ -245,19 +303,31 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               ))}
             </div>
 
-            <div className="bg-white p-6 rounded-xl border space-y-4">
-              <h3 className="text-lg font-bold">{t('assignment.feedback')}</h3>
-              <textarea
-                value={reviewForm.feedback}
-                onChange={(e) => setReviewForm(prev => ({ ...prev, feedback: e.target.value }))}
-                className="w-full h-32 p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder={t('assignment.type_response')}
-                required={assignment.mandatory_feedback}
-              />
+            <div className="bg-white rounded-xl border space-y-4 overflow-hidden">
+              <div className="p-6 pb-0">
+                <h3 className="text-lg font-bold">{t('assignment.feedback')}</h3>
+              </div>
+              <div className="p-2">
+                <EditorContent editor={feedbackEditor} />
+              </div>
               {assignment.mandatory_feedback && (
-                <p className={`text-xs ${reviewForm.feedback.length < assignment.min_char_count ? 'text-red-500' : 'text-green-600'}`}>
-                  {t('assignment.char_required', { current: reviewForm.feedback.length, min: assignment.min_char_count })}
-                </p>
+                <div className="px-6 pb-6">
+                  <p className={`text-xs ${(() => {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = reviewForm.feedback;
+                    const len = (tempDiv.textContent || tempDiv.innerText || '').length;
+                    return len < assignment.min_char_count ? 'text-red-500' : 'text-green-600';
+                  })()}`}>
+                    {t('assignment.char_required', {
+                      current: (() => {
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = reviewForm.feedback;
+                        return (tempDiv.textContent || tempDiv.innerText || '').length;
+                      })(),
+                      min: assignment.min_char_count
+                    })}
+                  </p>
+                </div>
               )}
             </div>
 
@@ -310,8 +380,12 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               <h3 className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-4">
                 {isReceived ? t('assignment.your_submission') : t('assignment.peer_submission')}
               </h3>
-              <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">
-                {targetSubmission?.content?.text}
+              <div className="prose max-w-none text-gray-800">
+                {viewingReview.highlightedSubmission ? (
+                  <RichTextRenderer content={viewingReview.highlightedSubmission} />
+                ) : (
+                  <div className="whitespace-pre-wrap">{targetSubmission?.content?.text}</div>
+                )}
               </div>
             </div>
           </div>
@@ -325,8 +399,8 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
             <div className="bg-white p-6 rounded-xl border space-y-4">
               <h3 className="text-lg font-bold">{t('assignment.feedback')}</h3>
-              <div className="bg-gray-50 p-4 rounded-lg text-gray-700 italic border border-dashed text-sm">
-                "{viewingReview.feedback}"
+              <div className="bg-gray-50 p-4 rounded-lg text-gray-700 border border-dashed text-sm">
+                <RichTextRenderer content={viewingReview.feedback} />
               </div>
             </div>
 
@@ -463,9 +537,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
                 <RubricDisplay rubric={assignment.rubric} ratings={rev.ratings} />
 
-                <p className="text-gray-700 italic text-sm border-l-4 border-indigo-100 pl-4 py-1">
-                  "{rev.feedback}"
-                </p>
+                <div className="text-gray-700 text-sm border-l-4 border-indigo-100 pl-4 py-1">
+                  <RichTextRenderer content={rev.feedback} />
+                </div>
 
                 {/* Meta-Review / Agreement */}
                 <div className="pt-4 border-t space-y-3">
