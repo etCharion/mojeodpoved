@@ -101,7 +101,9 @@ const resources = {
         student: 'Student',
         content: 'Obsah',
         reviews_received: 'Obdržené recenze',
+        reviews_written: 'Napsané recenze',
         review_by: 'Recenze od {{name}}',
+        review_for: 'Recenze pro {{name}}',
         target: 'Cíl: {{name}}',
         ratings: 'Hodnocení',
         feedback: 'Zpětná vazba',
@@ -113,6 +115,7 @@ const resources = {
         delete_submission_confirm: 'Opravdu chcete smazat toto odevzdání (včetně všech jeho recenzí)?',
         status_expected: 'Očekáváno',
         status_submitted: 'Odevzdáno',
+        original_text: 'Originální text práce',
 
         // Settings/Builder
         basic_info: 'Základní informace',
@@ -298,7 +301,9 @@ const resources = {
         student: 'Student',
         content: 'Content',
         reviews_received: 'Reviews Received',
+        reviews_written: 'Reviews Written',
         review_by: 'Review by {{name}}',
+        review_for: 'Review for {{name}}',
         target: 'Target: {{name}}',
         ratings: 'Ratings',
         feedback: 'Feedback',
@@ -310,6 +315,7 @@ const resources = {
         delete_submission_confirm: 'Are you sure you want to delete this submission (including all its reviews)?',
         status_expected: 'Expected',
         status_submitted: 'Submitted',
+        original_text: 'Original submission text',
 
         // Settings/Builder
         basic_info: 'Basic Information',
