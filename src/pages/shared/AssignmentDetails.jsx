@@ -19,6 +19,7 @@ export default function AssignmentDetails() {
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedReviews, setExpandedReviews] = useState(new Set());
+  const [expandedSubmissions, setExpandedSubmissions] = useState(new Set());
   const [sortConfig, setSortConfig] = useState({ field: 'completedAt', direction: 'desc' });
 
   useEffect(() => {
@@ -98,6 +99,30 @@ export default function AssignmentDetails() {
       newExpanded.add(id);
     }
     setExpandedReviews(newExpanded);
+  };
+
+  const toggleSubmissionExpand = (id) => {
+    const newExpanded = new Set(expandedSubmissions);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedSubmissions(newExpanded);
+  };
+
+  const jumpToReview = (reviewId) => {
+    setExpandedReviews(prev => {
+      const next = new Set(prev);
+      next.add(reviewId);
+      return next;
+    });
+    setTimeout(() => {
+      const el = document.getElementById(`review-${reviewId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
   };
 
   const sortedReviews = [...reviews]
@@ -231,6 +256,7 @@ export default function AssignmentDetails() {
                 <th className="px-6 py-3 border-b">{t('assignment.student')}</th>
                 <th className="px-6 py-3 border-b">{t('assignment.content')}</th>
                 <th className="px-6 py-3 border-b">{t('assignment.reviews_received')}</th>
+                <th className="px-6 py-3 border-b">{t('assignment.reviews_written')}</th>
                 <th className="px-6 py-3 border-b">{t('common.status')}</th>
               </tr>
             </thead>
@@ -241,60 +267,163 @@ export default function AssignmentDetails() {
                 return (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0);
               }).map((sub) => {
                 const subReviews = reviews.filter(r => r.submissionId === sub.id);
+                const writtenReviews = reviews.filter(r => r.reviewerId === sub.studentId);
                 const isExpected = sub.status === 'expected';
+                const isSubExpanded = expandedSubmissions.has(sub.id);
 
                 return (
-                  <tr key={sub.id} className="hover:bg-gray-50 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{sub.studentName}</div>
-                      <div className="text-xs text-gray-400">{sub.studentId}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {isExpected ? (
-                        <div className="text-sm text-gray-400 italic flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> {t('assignment.status_expected')}
-                        </div>
-                      ) : (
-                        <div className="max-w-xs truncate text-sm text-gray-600 italic">
-                          "{sub.content?.text?.substring(0, 50)}..."
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-1">
-                        {subReviews.map((r, i) => (
-                          <div
-                            key={i}
-                            title={r.status === 'completed' ? 'Completed' : 'Pending'}
-                            className={`w-3 h-3 rounded-full ${r.status === 'completed' ? 'bg-green-500' : 'bg-gray-300'}`}
-                          ></div>
-                        ))}
-                        {subReviews.length === 0 && !isExpected && <span className="text-gray-400 text-xs italic">None yet</span>}
-                        {isExpected && <span className="text-gray-300 text-xs">—</span>}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-between">
-                        {isExpected ? (
-                          <span className="text-sm font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded">{t('assignment.status_expected')}</span>
-                        ) : (
-                          <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">{t('assignment.status_submitted')}</span>
-                        )}
+                  <React.Fragment key={sub.id}>
+                    <tr className="hover:bg-gray-50 transition-colors group">
+                      <td className="px-6 py-4">
                         <button
-                          onClick={() => handleDeleteSubmission(sub)}
-                          className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                          title={t('common.delete')}
+                          onClick={() => !isExpected && toggleSubmissionExpand(sub.id)}
+                          className={`flex items-start gap-2 text-left ${!isExpected ? 'hover:text-indigo-600 transition-colors' : ''}`}
+                          disabled={isExpected}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {!isExpected && (
+                            <div className="mt-1">
+                              {isSubExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-medium text-gray-900">{sub.studentName}</div>
+                            <div className="text-xs text-gray-400">{sub.studentId}</div>
+                          </div>
                         </button>
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-6 py-4">
+                        {isExpected ? (
+                          <div className="text-sm text-gray-400 italic flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> {t('assignment.status_expected')}
+                          </div>
+                        ) : (
+                          <div className="max-w-xs truncate text-sm text-gray-600 italic">
+                            "{sub.content?.text?.substring(0, 50)}..."
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex gap-1">
+                          {subReviews.map((r, i) => {
+                            const revSub = submissions.find(s => s.studentId === r.reviewerId);
+                            const revName = revSub?.studentName || r.reviewerName || t('common.unknown');
+                            return (
+                              <button
+                                key={i}
+                                onClick={() => r.status === 'completed' && jumpToReview(r.id)}
+                                title={t('assignment.review_by', { name: revName })}
+                                className={`w-3 h-3 rounded-full ${r.status === 'completed' ? 'bg-green-500 cursor-pointer hover:ring-2 ring-green-200' : 'bg-gray-300 cursor-default'}`}
+                              ></button>
+                            );
+                          })}
+                          {subReviews.length === 0 && !isExpected && <span className="text-gray-400 text-xs italic">None yet</span>}
+                          {isExpected && <span className="text-gray-300 text-xs">—</span>}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex gap-1">
+                          {writtenReviews.map((r, i) => {
+                            const targetSub = submissions.find(s => s.id === r.submissionId);
+                            const targetName = targetSub?.studentName || t('common.unknown');
+                            return (
+                              <button
+                                key={i}
+                                onClick={() => r.status === 'completed' && jumpToReview(r.id)}
+                                title={t('assignment.review_for', { name: targetName })}
+                                className={`w-3 h-3 rounded-full ${r.status === 'completed' ? 'bg-indigo-500 cursor-pointer hover:ring-2 ring-indigo-200' : 'bg-gray-300 cursor-default'}`}
+                              ></button>
+                            );
+                          })}
+                          {writtenReviews.length === 0 && !isExpected && <span className="text-gray-400 text-xs italic">None yet</span>}
+                          {isExpected && <span className="text-gray-300 text-xs">—</span>}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-between">
+                          {isExpected ? (
+                            <span className="text-sm font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded">{t('assignment.status_expected')}</span>
+                          ) : (
+                            <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">{t('assignment.status_submitted')}</span>
+                          )}
+                          <button
+                            onClick={() => handleDeleteSubmission(sub)}
+                            className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                            title={t('common.delete')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isSubExpanded && !isExpected && (
+                      <tr className="bg-gray-50/50">
+                        <td colSpan="5" className="px-6 py-4 border-b">
+                          <div className="bg-white p-6 rounded-xl border shadow-sm space-y-6">
+                            <div>
+                              <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">{t('assignment.content')}</h4>
+                              <div className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
+                                {sub.content?.text}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t">
+                              <div>
+                                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">{t('assignment.reviews_received')}</h4>
+                                <div className="space-y-2">
+                                  {subReviews.length > 0 ? (
+                                    subReviews.map(r => {
+                                      const revSub = submissions.find(s => s.studentId === r.reviewerId);
+                                      const revName = revSub?.studentName || r.reviewerName || t('common.unknown');
+                                      return (
+                                        <button
+                                          key={r.id}
+                                          onClick={() => r.status === 'completed' && jumpToReview(r.id)}
+                                          className={`flex items-center gap-2 text-sm font-medium ${r.status === 'completed' ? 'text-indigo-600 hover:underline' : 'text-gray-400 cursor-default'}`}
+                                        >
+                                          <div className={`w-2 h-2 rounded-full ${r.status === 'completed' ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                                          {t('assignment.review_by', { name: revName })}
+                                        </button>
+                                      );
+                                    })
+                                  ) : (
+                                    <p className="text-xs text-gray-400 italic">{t('common.none')}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">{t('assignment.reviews_written')}</h4>
+                                <div className="space-y-2">
+                                  {writtenReviews.length > 0 ? (
+                                    writtenReviews.map(r => {
+                                      const targetSub = submissions.find(s => s.id === r.submissionId);
+                                      const targetName = targetSub?.studentName || t('common.unknown');
+                                      return (
+                                        <button
+                                          key={r.id}
+                                          onClick={() => r.status === 'completed' && jumpToReview(r.id)}
+                                          className={`flex items-center gap-2 text-sm font-medium ${r.status === 'completed' ? 'text-indigo-600 hover:underline' : 'text-gray-400 cursor-default'}`}
+                                        >
+                                          <div className={`w-2 h-2 rounded-full ${r.status === 'completed' ? 'bg-indigo-500' : 'bg-gray-300'}`}></div>
+                                          {t('assignment.review_for', { name: targetName })}
+                                        </button>
+                                      );
+                                    })
+                                  ) : (
+                                    <p className="text-xs text-gray-400 italic">{t('common.none')}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
               {submissions.length === 0 && (
                 <tr>
-                  <td colSpan="4" className="px-6 py-12 text-center text-gray-400">{t('assignment.no_submissions')}</td>
+                  <td colSpan="5" className="px-6 py-12 text-center text-gray-400">{t('assignment.no_submissions')}</td>
                 </tr>
               )}
             </tbody>
@@ -347,7 +476,8 @@ export default function AssignmentDetails() {
         <div className="divide-y">
           {sortedReviews.map((review) => {
             const isExpanded = expandedReviews.has(review.id);
-            const authorName = submissions.find(s => s.id === review.submissionId)?.studentName || t('common.unknown');
+            const authorSubmission = submissions.find(s => s.id === review.submissionId);
+            const authorName = authorSubmission?.studentName || t('common.unknown');
 
             const passFailIds = new Set(assignment.rubric?.filter(i => i.type === 'passfail').map(i => i.id) || []);
             const numericRatings = Object.entries(review.ratings || {})
@@ -356,7 +486,7 @@ export default function AssignmentDetails() {
             const avgRating = numericRatings.length > 0 ? (numericRatings.reduce((a, b) => a + b, 0) / numericRatings.length).toFixed(1) : null;
 
             return (
-              <div key={review.id} className="group transition-colors">
+              <div key={review.id} id={`review-${review.id}`} className="group transition-colors">
                 <div
                   onClick={() => toggleExpand(review.id)}
                   className={`p-6 cursor-pointer hover:bg-gray-50 flex items-start justify-between gap-4 ${isExpanded ? 'bg-indigo-50/30' : ''}`}
@@ -402,7 +532,14 @@ export default function AssignmentDetails() {
 
                 {isExpanded && (
                   <div className="px-6 pb-6 pt-2 border-t border-indigo-100/50 bg-indigo-50/10">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
+                    <div className="mt-4 p-4 bg-white rounded-xl border border-indigo-100 shadow-sm">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">{t('assignment.original_text')}</p>
+                      <div className="text-sm text-gray-600 whitespace-pre-wrap italic leading-relaxed">
+                        {authorSubmission?.content?.text || <span className="text-gray-400">{t('common.none')}</span>}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
                       <div className="space-y-4">
                         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('assignment.ratings')}</p>
                         <RubricDisplay rubric={assignment.rubric} ratings={review.ratings} />
