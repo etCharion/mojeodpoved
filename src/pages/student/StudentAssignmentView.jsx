@@ -16,6 +16,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const [activeReview, setActiveReview] = useState(null);
   const [viewingReview, setViewingReview] = useState(null);
   const [reviewForm, setReviewForm] = useState({ ratings: {}, feedback: '' });
+  const [hoveredRatings, setHoveredRatings] = useState({});
   const [metaReviewNotes, setMetaReviewNotes] = useState({});
 
   const mySubmission = submissions.find(s => s.studentId === user.uid);
@@ -189,17 +190,23 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                 <div key={item.id} className="space-y-3">
                   <label className="font-medium text-gray-700">{item.question}</label>
                   {item.type === 'stars' ? (
-                    <div className="flex gap-2">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <button
-                          key={star}
-                          type="button"
-                          onClick={() => setReviewForm(prev => ({ ...prev, ratings: { ...prev.ratings, [item.id]: star } }))}
-                          className={`p-2 rounded-lg border transition-colors ${reviewForm.ratings[item.id] === star ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white text-gray-400 hover:border-indigo-300'}`}
-                        >
-                          <Star className={`w-6 h-6 ${reviewForm.ratings[item.id] === star ? 'fill-current' : ''}`} />
-                        </button>
-                      ))}
+                    <div className="flex gap-2" onMouseLeave={() => setHoveredRatings(prev => ({ ...prev, [item.id]: 0 }))}>
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const displayValue = hoveredRatings[item.id] || reviewForm.ratings[item.id] || 0;
+                        const isActive = star <= displayValue;
+
+                        return (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setReviewForm(prev => ({ ...prev, ratings: { ...prev.ratings, [item.id]: star } }))}
+                            onMouseEnter={() => setHoveredRatings(prev => ({ ...prev, [item.id]: star }))}
+                            className={`p-2 rounded-lg border transition-colors ${isActive ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white text-gray-400 hover:border-indigo-300'}`}
+                          >
+                            <Star className={`w-6 h-6 ${isActive ? 'fill-current' : ''}`} />
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : item.type === 'passfail' ? (
                     <div className="flex items-center gap-3">
