@@ -297,7 +297,8 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               <div className="p-3 border-b bg-gray-50 flex flex-wrap items-center justify-between gap-2 sticky top-0 z-20">
                 <h3 className="text-lg font-bold px-2">{t('assignment.feedback')}</h3>
                 <EditorToolbar
-                  editors={[submissionEditor, feedbackEditor]}
+                  highlightEditors={[submissionEditor, feedbackEditor]}
+                  formatEditors={[feedbackEditor]}
                   activeColor={activeColor}
                   setActiveColor={setActiveColor}
                   isEraserActive={isEraserActive}

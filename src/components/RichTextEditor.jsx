@@ -145,7 +145,8 @@ export const useRichTextEditor = ({
 };
 
 export const EditorToolbar = ({
-  editors = [],
+  highlightEditors = [],
+  formatEditors = [],
   activeColor,
   setActiveColor,
   isEraserActive,
@@ -172,7 +173,7 @@ export const EditorToolbar = ({
   };
 
   const isMarkActive = (type) => {
-    return editors.some(editor => editor?.isActive(type));
+    return formatEditors.some(editor => editor?.isActive(type));
   };
 
   return (
@@ -182,7 +183,7 @@ export const EditorToolbar = ({
           <button
             type="button"
             onClick={() => {
-              const focused = editors.find(e => e?.isFocused) || editors[0];
+              const focused = formatEditors.find(e => e?.isFocused) || formatEditors[0];
               focused?.chain().focus().toggleBold().run();
             }}
             className={`p-1.5 rounded hover:bg-gray-100 ${isMarkActive('bold') ? 'bg-gray-100 text-indigo-600' : 'text-gray-600'}`}
@@ -193,7 +194,7 @@ export const EditorToolbar = ({
           <button
             type="button"
             onClick={() => {
-              const focused = editors.find(e => e?.isFocused) || editors[0];
+              const focused = formatEditors.find(e => e?.isFocused) || formatEditors[0];
               focused?.chain().focus().toggleItalic().run();
             }}
             className={`p-1.5 rounded hover:bg-gray-100 ${isMarkActive('italic') ? 'bg-gray-100 text-indigo-600' : 'text-gray-600'}`}
@@ -204,7 +205,7 @@ export const EditorToolbar = ({
           <button
             type="button"
             onClick={() => {
-              const focused = editors.find(e => e?.isFocused) || editors[0];
+              const focused = formatEditors.find(e => e?.isFocused) || formatEditors[0];
               focused?.chain().focus().toggleUnderline().run();
             }}
             className={`p-1.5 rounded hover:bg-gray-100 ${isMarkActive('underline') ? 'bg-gray-100 text-indigo-600' : 'text-gray-600'}`}
