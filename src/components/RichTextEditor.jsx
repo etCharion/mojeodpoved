@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
@@ -17,6 +17,10 @@ export const useRichTextEditor = ({
   activeColor,
   isEraserActive
 }) => {
+  // Use refs to keep handlers up to date without re-creating the editor
+  const activeColorRef = useRef(activeColor);
+  const isEraserActiveRef = useRef(isEraserActive);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -28,7 +32,6 @@ export const useRichTextEditor = ({
     onUpdate: ({ editor }) => {
       if (onChange) {
         const html = editor.getHTML();
-        // Avoid infinite loop if content is same
         onChange(html);
       }
     },
@@ -38,7 +41,6 @@ export const useRichTextEditor = ({
       },
       handleKeyDown: (view, event) => {
         if (highlightOnly) {
-          // Allow selection/navigation keys and common shortcuts (copy/select all) but block everything else
           const isMeta = event.ctrlKey || event.metaKey;
           const navKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown', 'Escape', 'Tab'];
           const shortcutKeys = ['c', 'a', 'z', 'y'];
@@ -46,21 +48,31 @@ export const useRichTextEditor = ({
           if (navKeys.includes(event.key)) return false;
           if (isMeta && shortcutKeys.includes(event.key.toLowerCase())) return false;
 
-          return true; // Block input
+          return true;
         }
         return false;
       },
       handleDOMEvents: {
         mouseup: (view, event) => {
-          if (!readOnly && (activeColor || isEraserActive)) {
+          const color = activeColorRef.current;
+          const eraser = isEraserActiveRef.current;
+
+          if (!readOnly && (color || eraser)) {
             const { state } = view;
             const { selection } = state;
             if (!selection.empty) {
-              if (isEraserActive) {
-                view.dispatch(state.tr.removeMark(selection.from, selection.to, state.schema.marks.highlight));
-              } else if (activeColor) {
-                view.dispatch(state.tr.addMark(selection.from, selection.to, state.schema.marks.highlight.create({ color: activeColor })));
+              let tr = state.tr;
+              if (eraser) {
+                tr = tr.removeMark(selection.from, selection.to, state.schema.marks.highlight);
+              } else if (color) {
+                tr = tr.addMark(selection.from, selection.to, state.schema.marks.highlight.create({ color }));
               }
+
+              // Collapse selection to the end to prevent immediate overwrite if color is changed
+              const pos = selection.to;
+              tr = tr.setSelection(state.selection.constructor.near(tr.doc.resolve(pos)));
+
+              view.dispatch(tr);
               return true;
             }
           }
@@ -69,6 +81,41 @@ export const useRichTextEditor = ({
       }
     }
   });
+
+  useEffect(() => {
+    activeColorRef.current = activeColor;
+    isEraserActiveRef.current = isEraserActive;
+
+    if (editor) {
+      editor.setOptions({
+        editorProps: {
+          handleDOMEvents: {
+            mouseup: (view, event) => {
+              const color = activeColorRef.current;
+              const eraser = isEraserActiveRef.current;
+              if (!readOnly && (color || eraser)) {
+                const { state } = view;
+                const { selection } = state;
+                if (!selection.empty) {
+                  let tr = state.tr;
+                  if (eraser) {
+                    tr = tr.removeMark(selection.from, selection.to, state.schema.marks.highlight);
+                  } else if (color) {
+                    tr = tr.addMark(selection.from, selection.to, state.schema.marks.highlight.create({ color }));
+                  }
+                  const pos = selection.to;
+                  tr = tr.setSelection(state.selection.constructor.near(tr.doc.resolve(pos)));
+                  view.dispatch(tr);
+                  return true;
+                }
+              }
+              return false;
+            }
+          }
+        }
+      });
+    }
+  }, [activeColor, isEraserActive, editor, readOnly]);
 
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
@@ -80,12 +127,15 @@ export const useRichTextEditor = ({
   useEffect(() => {
     if (editor && !readOnly) {
       if (activeColor && !isEraserActive) {
-        // If there's a selection, apply highlight. If not, set it for next typing.
-        editor.chain().focus().setHighlight({ color: activeColor }).run();
-      } else if (!activeColor && !isEraserActive) {
-        // Only unset if no selection to avoid "disappearing highlights" when toggling toolbar buttons
+        // Set highlight for typing and apply to current selection if any
+        editor.chain().setHighlight({ color: activeColor }).run();
+      } else {
+        // If color is removed or eraser is active, unset the "stored" highlight mark
+        // but ONLY if the selection is empty to avoid removing highlights from existing text.
+        // We use removeStoredMark surgically to avoid the "extendEmptyMarkRange" behavior
+        // of the default unsetHighlight command which can delete the mark we just created.
         if (editor.state.selection.empty) {
-          editor.chain().focus().unsetHighlight().run();
+          editor.view.dispatch(editor.state.tr.removeStoredMark(editor.state.schema.marks.highlight));
         }
       }
     }
