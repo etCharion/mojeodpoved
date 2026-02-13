@@ -80,9 +80,13 @@ export const useRichTextEditor = ({
   useEffect(() => {
     if (editor && !readOnly) {
       if (activeColor && !isEraserActive) {
+        // If there's a selection, apply highlight. If not, set it for next typing.
         editor.chain().focus().setHighlight({ color: activeColor }).run();
-      } else if (!activeColor) {
-        editor.chain().focus().unsetHighlight().run();
+      } else if (!activeColor && !isEraserActive) {
+        // Only unset if no selection to avoid "disappearing highlights" when toggling toolbar buttons
+        if (editor.state.selection.empty) {
+          editor.chain().focus().unsetHighlight().run();
+        }
       }
     }
   }, [activeColor, isEraserActive, editor, readOnly]);
@@ -109,13 +113,12 @@ export const EditorToolbar = ({
   };
 
   const selectColor = (color) => {
-    setActiveColor(color);
-    setIsEraserActive(false);
-  };
-
-  const clearHighlight = () => {
-    setActiveColor(null);
-    setIsEraserActive(false);
+    if (activeColor === color) {
+      setActiveColor(null);
+    } else {
+      setActiveColor(color);
+      setIsEraserActive(false);
+    }
   };
 
   const isMarkActive = (type) => {
@@ -123,16 +126,16 @@ export const EditorToolbar = ({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 p-2 border-b bg-gray-50 rounded-t-xl sticky top-0 z-20 shadow-sm">
+    <div className="flex flex-wrap items-center gap-2 p-1 bg-transparent">
       {showFormatting && (
-        <div className="flex items-center gap-1 pr-2 border-r border-gray-300">
+        <div className="flex items-center gap-1 pr-1 border-r border-gray-300">
           <button
             type="button"
             onClick={() => {
               const focused = editors.find(e => e?.isFocused) || editors[0];
               focused?.chain().focus().toggleBold().run();
             }}
-            className={`p-1.5 rounded hover:bg-gray-200 ${isMarkActive('bold') ? 'bg-gray-200 text-indigo-600' : 'text-gray-600'}`}
+            className={`p-1.5 rounded hover:bg-gray-100 ${isMarkActive('bold') ? 'bg-gray-100 text-indigo-600' : 'text-gray-600'}`}
             title={t('editor.bold')}
           >
             <Bold className="w-4 h-4" />
@@ -143,7 +146,7 @@ export const EditorToolbar = ({
               const focused = editors.find(e => e?.isFocused) || editors[0];
               focused?.chain().focus().toggleItalic().run();
             }}
-            className={`p-1.5 rounded hover:bg-gray-200 ${isMarkActive('italic') ? 'bg-gray-200 text-indigo-600' : 'text-gray-600'}`}
+            className={`p-1.5 rounded hover:bg-gray-100 ${isMarkActive('italic') ? 'bg-gray-100 text-indigo-600' : 'text-gray-600'}`}
             title={t('editor.italic')}
           >
             <Italic className="w-4 h-4" />
@@ -154,7 +157,7 @@ export const EditorToolbar = ({
               const focused = editors.find(e => e?.isFocused) || editors[0];
               focused?.chain().focus().toggleUnderline().run();
             }}
-            className={`p-1.5 rounded hover:bg-gray-200 ${isMarkActive('underline') ? 'bg-gray-200 text-indigo-600' : 'text-gray-600'}`}
+            className={`p-1.5 rounded hover:bg-gray-100 ${isMarkActive('underline') ? 'bg-gray-100 text-indigo-600' : 'text-gray-600'}`}
             title={t('editor.underline')}
           >
             <UnderlineIcon className="w-4 h-4" />
@@ -162,7 +165,7 @@ export const EditorToolbar = ({
         </div>
       )}
 
-      <div className="flex items-center gap-1 pr-2 border-r border-gray-300">
+      <div className="flex items-center gap-1 pr-1 border-r border-gray-300">
         {HIGHLIGHTER_COLORS.map((c) => (
           <button
             key={c.id}
@@ -178,16 +181,8 @@ export const EditorToolbar = ({
       <div className="flex items-center gap-1">
         <button
           type="button"
-          onClick={clearHighlight}
-          className={`p-1.5 rounded hover:bg-gray-200 ${(!activeColor && !isEraserActive) ? 'bg-gray-200 text-indigo-600' : 'text-gray-600'}`}
-          title={t('editor.no_highlight')}
-        >
-          <MinusCircle className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
           onClick={toggleEraser}
-          className={`p-1.5 rounded hover:bg-gray-200 ${isEraserActive ? 'bg-gray-200 text-red-600' : 'text-gray-600'}`}
+          className={`p-1.5 rounded hover:bg-gray-100 ${isEraserActive ? 'bg-gray-100 text-red-600' : 'text-gray-600'}`}
           title={t('editor.eraser')}
         >
           <Eraser className="w-4 h-4" />

@@ -219,19 +219,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           <button onClick={() => setActiveReview(null)} className="text-gray-500 hover:underline">{t('common.cancel')}</button>
         </div>
 
-        <div className="bg-white border rounded-xl overflow-hidden shadow-sm sticky top-4 z-30">
-          <EditorToolbar
-            editors={[submissionEditor, feedbackEditor]}
-            activeColor={activeColor}
-            setActiveColor={setActiveColor}
-            isEraserActive={isEraserActive}
-            setIsEraserActive={setIsEraserActive}
-          />
-        </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Peer Work */}
-          <div className="bg-white rounded-xl border h-fit lg:sticky lg:top-24 overflow-hidden">
+          <div className="bg-white rounded-xl border h-fit lg:sticky lg:top-8 overflow-hidden">
             <div className="p-4 border-b bg-gray-50">
               <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">{t('assignment.peer_submission')}</h3>
             </div>
@@ -303,9 +293,16 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               ))}
             </div>
 
-            <div className="bg-white rounded-xl border space-y-4 overflow-hidden">
-              <div className="p-6 pb-0">
-                <h3 className="text-lg font-bold">{t('assignment.feedback')}</h3>
+            <div className="bg-white rounded-xl border space-y-4 overflow-hidden relative">
+              <div className="p-3 border-b bg-gray-50 flex flex-wrap items-center justify-between gap-2 sticky top-0 z-20">
+                <h3 className="text-lg font-bold px-2">{t('assignment.feedback')}</h3>
+                <EditorToolbar
+                  editors={[submissionEditor, feedbackEditor]}
+                  activeColor={activeColor}
+                  setActiveColor={setActiveColor}
+                  isEraserActive={isEraserActive}
+                  setIsEraserActive={setIsEraserActive}
+                />
               </div>
               <div className="p-2">
                 <EditorContent editor={feedbackEditor} />
