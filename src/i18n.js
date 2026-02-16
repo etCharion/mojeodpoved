@@ -173,6 +173,7 @@ const resources = {
         rubric: 'Rubrika',
         char_required: '{{current}} / {{min}} znaků vyžadováno',
         submit_review: 'Odeslat recenzi',
+        submit_assignment: 'Odevzdat práci',
         error_submitting_work: 'Chyba při odevzdávání práce',
         error_saving_review: 'Chyba při ukládání recenze',
 
@@ -389,6 +390,7 @@ const resources = {
         rubric: 'Rubric',
         char_required: '{{current}} / {{min}} characters required',
         submit_review: 'Submit Review',
+        submit_assignment: 'Submit Assignment',
         error_submitting_work: 'Error submitting work',
         error_saving_review: 'Error saving review',
 
