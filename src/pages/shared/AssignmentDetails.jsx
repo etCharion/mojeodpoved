@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
 import { doc, onSnapshot, collection, query, where, updateDoc, deleteDoc, getDocs, serverTimestamp } from 'firebase/firestore';
@@ -15,6 +15,7 @@ export default function AssignmentDetails() {
   const { t } = useTranslation();
   const { assignmentId } = useParams();
   const { userData } = useAuth();
+  const navigate = useNavigate();
   const [assignment, setAssignment] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [reviews, setReviews] = useState([]);
@@ -51,6 +52,32 @@ export default function AssignmentDetails() {
   const handleDeleteReview = async (reviewId) => {
     if (!window.confirm(t('assignment.delete_review_confirm'))) return;
     await deleteDoc(doc(db, 'reviews', reviewId));
+  };
+
+  const handleDeleteAssignment = async () => {
+    if (!window.confirm(t('assignment.delete_confirm'))) return;
+    try {
+      const classId = assignment.classId;
+      // 1. Delete reviews
+      const qReviews = query(collection(db, 'reviews'), where('assignmentId', '==', assignmentId));
+      const snapReviews = await getDocs(qReviews);
+
+      // 2. Delete submissions
+      const qSubmissions = query(collection(db, 'submissions'), where('assignmentId', '==', assignmentId));
+      const snapSubmissions = await getDocs(qSubmissions);
+
+      const deletePromises = [
+        ...snapReviews.docs.map(d => deleteDoc(d.ref)),
+        ...snapSubmissions.docs.map(d => deleteDoc(d.ref)),
+        deleteDoc(doc(db, 'assignments', assignmentId))
+      ];
+
+      await Promise.all(deletePromises);
+      navigate(`/teacher/class/${classId}`);
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting assignment");
+    }
   };
 
   const handleDeleteSubmission = async (sub) => {
@@ -179,6 +206,15 @@ export default function AssignmentDetails() {
             <Edit className="w-4 h-4" />
             <span>{t('assignment.edit_assignment')}</span>
           </Link>
+
+          <button
+            onClick={handleDeleteAssignment}
+            className="flex items-center gap-2 border border-red-200 text-red-600 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors"
+            title={t('assignment.delete_assignment')}
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>{t('assignment.delete_assignment')}</span>
+          </button>
 
           <button
               onClick={() => toggleField('isVisible', assignment.isVisible === false)}

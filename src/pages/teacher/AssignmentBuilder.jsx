@@ -185,9 +185,10 @@ export default function AssignmentBuilder() {
   const { assignmentId } = useParams();
   const [searchParams] = useSearchParams();
   const classId = searchParams.get('classId');
+  const copyFrom = searchParams.get('copyFrom');
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(assignmentId ? true : false);
+  const [loading, setLoading] = useState((assignmentId || copyFrom) ? true : false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [mandatoryFeedback, setMandatoryFeedback] = useState(true);
@@ -210,9 +211,10 @@ export default function AssignmentBuilder() {
   );
 
   useEffect(() => {
-    if (assignmentId) {
+    const idToFetch = assignmentId || copyFrom;
+    if (idToFetch) {
       const fetchAssignment = async () => {
-        const docRef = doc(db, 'assignments', assignmentId);
+        const docRef = doc(db, 'assignments', idToFetch);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
@@ -226,18 +228,28 @@ export default function AssignmentBuilder() {
           setIsVisible(data.isVisible ?? true);
           setAllowSubmissions(data.allowSubmissions ?? true);
           setAllowReviews(data.allowReviews ?? true);
-          setRubric((data.rubric || []).map(item => ({
-            ...item,
-            options: (item.options || []).map((opt, idx) =>
-              typeof opt === 'string' ? { id: `legacy-${idx}-${Date.now()}`, value: opt } : opt
-            )
-          })));
+
+          // If copying, regenerate IDs for rubric items to ensure they are unique
+          const newRubric = (data.rubric || []).map(item => {
+            const newItemId = copyFrom ? `copy-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` : item.id;
+            return {
+              ...item,
+              id: newItemId,
+              options: (item.options || []).map((opt, idx) => {
+                if (typeof opt === 'string') {
+                  return { id: `legacy-${idx}-${Date.now()}`, value: opt };
+                }
+                return copyFrom ? { ...opt, id: `opt-copy-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` } : opt;
+              })
+            };
+          });
+          setRubric(newRubric);
         }
         setLoading(false);
       };
       fetchAssignment();
     }
-  }, [assignmentId]);
+  }, [assignmentId, copyFrom]);
 
   const addRubricItem = (type) => {
     const newItem = {
