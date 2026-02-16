@@ -3,12 +3,139 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
 import { doc, onSnapshot, collection, query, where, updateDoc, arrayUnion, arrayRemove, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
-import { Users, BookOpen, Plus, Check, X, Clipboard, ExternalLink, Trash2, QrCode, Settings, Copy, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Users, BookOpen, Plus, Check, X, Clipboard, ExternalLink, Trash2, QrCode, Settings, Copy, ChevronRight, ArrowLeft, GripVertical } from 'lucide-react';
 import * as AllIcons from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import { useTranslation } from 'react-i18next';
 import { CLASS_COLORS, CLASS_ICONS } from '../../lib/constants';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+function SortableAssignmentItem({ assignment, isTeacher, t, setCopyModal, handleDeleteAssignment }) {
+  const navigate = useNavigate();
+  const wasDragging = React.useRef(false);
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: assignment.id, disabled: !isTeacher });
+
+  useEffect(() => {
+    if (isDragging) {
+      wasDragging.current = true;
+    }
+  }, [isDragging]);
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  const handleNavigate = () => {
+    navigate(isTeacher ? `/teacher/assignment/${assignment.id}` : `/student/assignment/${assignment.id}`);
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={() => {
+        if (wasDragging.current) {
+          wasDragging.current = false;
+          return;
+        }
+        handleNavigate();
+      }}
+      className={`p-4 bg-white border rounded-xl hover:shadow-sm transition-shadow flex justify-between items-center cursor-pointer ${isDragging ? 'shadow-lg border-indigo-200' : ''}`}
+    >
+      <div className="flex items-center gap-3">
+        {isTeacher && (
+          <GripVertical className="w-5 h-5 text-gray-400 cursor-grab active:cursor-grabbing" />
+        )}
+        <div>
+          <h3 className="font-medium text-gray-900">{assignment.title}</h3>
+          <p className="text-sm text-gray-500">
+            {assignment.reviews_per_submission} {t('assignment.reviews_per_student').toLowerCase()} • {t('assignment.min_submissions').replace('Min Submissions to Start (M)', 'Start at')} {assignment.review_start_threshold} {t('assignment.submissions').toLowerCase()}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {(() => {
+          let label = t('common.open');
+          let color = 'bg-green-100 text-green-700';
+
+          if (assignment.isVisible === false) {
+            label = t('common.hidden');
+            color = 'bg-gray-100 text-gray-700';
+          } else if (assignment.allowSubmissions === false) {
+            if (assignment.allowReviews !== false) {
+              label = t('common.open');
+              color = 'bg-yellow-100 text-yellow-700';
+            } else {
+              label = t('common.closed');
+              color = 'bg-red-100 text-red-700';
+            }
+          }
+
+          return (
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${color}`}>
+              {label}
+            </span>
+          );
+        })()}
+        {isTeacher && (
+          <div className="flex gap-1">
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setCopyModal({ isOpen: true, mode: 'select_target', sourceAssignment: assignment });
+              }}
+              className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+              title={t('assignment.copy_assignment')}
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleDeleteAssignment(e, assignment.id);
+              }}
+              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+              title={t('common.delete')}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        <ExternalLink className="w-4 h-4 text-gray-400" />
+      </div>
+    </div>
+  );
+}
 
 function CopyAssignmentModal({ isOpen, onClose, currentClassId, sourceAssignment, mode, t, user }) {
   const [classes, setClasses] = useState([]);
@@ -248,6 +375,17 @@ export default function ClassDetails() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [copyModal, setCopyModal] = useState({ isOpen: false, mode: 'select_source', sourceAssignment: null });
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   useEffect(() => {
     if (!classId) return;
 
@@ -349,6 +487,37 @@ export default function ClassDetails() {
 
   const isTeacher = userData?.role === 'teacher';
 
+  const handleAssignmentDragEnd = async (event) => {
+    if (!isTeacher) return;
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = sortedAssignments.findIndex((a) => a.id === active.id);
+      const newIndex = sortedAssignments.findIndex((a) => a.id === over.id);
+
+      const newSortedAssignments = arrayMove(sortedAssignments, oldIndex, newIndex);
+      const newOrder = newSortedAssignments.map(a => a.id);
+
+      await updateDoc(doc(db, 'classes', classId), {
+        assignmentOrder: newOrder
+      });
+    }
+  };
+
+  const sortedAssignments = [...assignments].sort((a, b) => {
+    const order = classInfo?.assignmentOrder || [];
+    const indexA = order.indexOf(a.id);
+    const indexB = order.indexOf(b.id);
+
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+    if (indexA !== -1) return -1;
+    if (indexB !== -1) return 1;
+
+    // Fallback to createdAt
+    const dateA = a.createdAt?.seconds || 0;
+    const dateB = b.createdAt?.seconds || 0;
+    return dateA - dateB;
+  });
+
   const handleDeleteAssignment = async (e, id) => {
     e.preventDefault();
     e.stopPropagation();
@@ -420,77 +589,36 @@ export default function ClassDetails() {
             <BookOpen className="w-5 h-5" />
             {t('class.assignments')}
           </h2>
-          <div className="grid gap-4">
-            {assignments
-              .filter(a => isTeacher || a.isVisible !== false)
-              .map((assignment) => (
-              <Link
-                key={assignment.id}
-                to={isTeacher ? `/teacher/assignment/${assignment.id}` : `/student/assignment/${assignment.id}`}
-                className="p-4 bg-white border rounded-xl hover:shadow-sm transition-shadow flex justify-between items-center"
-              >
-                <div>
-                  <h3 className="font-medium text-gray-900">{assignment.title}</h3>
-                  <p className="text-sm text-gray-500">
-                    {assignment.reviews_per_submission} {t('assignment.reviews_per_student').toLowerCase()} • {t('assignment.min_submissions').replace('Min Submissions to Start (M)', 'Start at')} {assignment.review_start_threshold} {t('assignment.submissions').toLowerCase()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {(() => {
-                    let label = t('common.open');
-                    let color = 'bg-green-100 text-green-700';
-
-                    if (assignment.isVisible === false) {
-                      label = t('common.hidden');
-                      color = 'bg-gray-100 text-gray-700';
-                    } else if (assignment.allowSubmissions === false) {
-                      if (assignment.allowReviews !== false) {
-                        label = t('common.open');
-                        color = 'bg-yellow-100 text-yellow-700';
-                      } else {
-                        label = t('common.closed');
-                        color = 'bg-red-100 text-red-700';
-                      }
-                    }
-
-                    return (
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${color}`}>
-                        {label}
-                      </span>
-                    );
-                  })()}
-                  {isTeacher && (
-                    <div className="flex gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setCopyModal({ isOpen: true, mode: 'select_target', sourceAssignment: assignment });
-                        }}
-                        className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                        title={t('assignment.copy_assignment')}
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={(e) => handleDeleteAssignment(e, assignment.id)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                        title={t('common.delete')}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                  <ExternalLink className="w-4 h-4 text-gray-400" />
-                </div>
-              </Link>
-            ))}
-            {assignments.length === 0 && (
-              <div className="text-center py-12 bg-gray-50 border-2 border-dashed rounded-xl text-gray-500">
-                {t('class.no_assignments')}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleAssignmentDragEnd}
+          >
+            <SortableContext
+              items={sortedAssignments.map(a => a.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="grid gap-4">
+                {sortedAssignments
+                  .filter(a => isTeacher || a.isVisible !== false)
+                  .map((assignment) => (
+                    <SortableAssignmentItem
+                      key={assignment.id}
+                      assignment={assignment}
+                      isTeacher={isTeacher}
+                      t={t}
+                      setCopyModal={setCopyModal}
+                      handleDeleteAssignment={handleDeleteAssignment}
+                    />
+                ))}
+                {assignments.length === 0 && (
+                  <div className="text-center py-12 bg-gray-50 border-2 border-dashed rounded-xl text-gray-500">
+                    {t('class.no_assignments')}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </SortableContext>
+          </DndContext>
         </div>
 
         {/* Student Management (Teacher Only) */}

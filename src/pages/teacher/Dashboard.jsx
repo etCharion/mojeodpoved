@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import * as Icons from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CLASS_COLORS } from '../../lib/constants';
 import {
@@ -24,6 +24,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 function SortableClassCard({ cls, userSettings, t }) {
+  const navigate = useNavigate();
+  const wasDragging = React.useRef(false);
   const {
     attributes,
     listeners,
@@ -32,6 +34,12 @@ function SortableClassCard({ cls, userSettings, t }) {
     transition,
     isDragging
   } = useSortable({ id: cls.id });
+
+  React.useEffect(() => {
+    if (isDragging) {
+      wasDragging.current = true;
+    }
+  }, [isDragging]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -47,28 +55,33 @@ function SortableClassCard({ cls, userSettings, t }) {
   const IconComponent = Icons[iconName] || Icons.BookOpen;
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="relative h-full">
-      <Link
-        to={`/teacher/class/${cls.id}`}
-        className="block bg-white border rounded-xl p-6 hover:shadow-md transition-shadow h-full"
-        onClick={(e) => {
-          if (isDragging) e.preventDefault();
-        }}
-      >
-        <div className="flex justify-between items-start mb-4">
-          <div className={`${colorConfig.bg} p-3 rounded-lg ${colorConfig.text}`}>
-            <IconComponent className="w-6 h-6" />
-          </div>
-          <Icons.ChevronRight className="w-5 h-5 text-gray-400" />
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={() => {
+        if (wasDragging.current) {
+          wasDragging.current = false;
+          return;
+        }
+        navigate(`/teacher/class/${cls.id}`);
+      }}
+      className="bg-white border rounded-xl p-6 hover:shadow-md transition-shadow h-full cursor-pointer"
+    >
+      <div className="flex justify-between items-start mb-4">
+        <div className={`${colorConfig.bg} p-3 rounded-lg ${colorConfig.text}`}>
+          <IconComponent className="w-6 h-6" />
         </div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">{cls.name}</h3>
-        <div className="flex items-center gap-4 text-sm text-gray-500">
-          <div className="flex items-center gap-1">
-            <Icons.Users className="w-4 h-4" />
-            <span>{(cls.studentEmails?.length || 0) + (cls.studentUids?.length || 0)} {t('dashboard.students_count')}</span>
-          </div>
+        <Icons.ChevronRight className="w-5 h-5 text-gray-400" />
+      </div>
+      <h3 className="text-xl font-semibold text-gray-900 mb-2">{cls.name}</h3>
+      <div className="flex items-center gap-4 text-sm text-gray-500">
+        <div className="flex items-center gap-1">
+          <Icons.Users className="w-4 h-4" />
+          <span>{(cls.studentEmails?.length || 0) + (cls.studentUids?.length || 0)} {t('dashboard.students_count')}</span>
         </div>
-      </Link>
+      </div>
     </div>
   );
 }
