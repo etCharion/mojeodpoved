@@ -23,6 +23,12 @@ export default function AssignmentDetails() {
   const [expandedReviews, setExpandedReviews] = useState(new Set());
   const [expandedSubmissions, setExpandedSubmissions] = useState(new Set());
   const [sortConfig, setSortConfig] = useState({ field: 'completedAt', direction: 'desc' });
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!assignmentId) return;
@@ -310,6 +316,15 @@ export default function AssignmentDetails() {
         </div>
       </div>
 
+      {assignment.timeLimit && (
+        <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex items-center gap-3 text-indigo-700">
+           <Clock className="w-5 h-5" />
+           <div className="text-sm">
+             <span className="font-bold">{t('assignment.time_limit')}:</span> {assignment.timeLimit} {t('common.minutes').toLowerCase() || 'min'}
+           </div>
+        </div>
+      )}
+
       {/* Submissions Table */}
       <section className="bg-white border rounded-xl overflow-hidden">
         <div className="p-6 border-b bg-gray-50">
@@ -363,7 +378,24 @@ export default function AssignmentDetails() {
                       <td className="px-6 py-4">
                         {isExpected ? (
                           <div className="text-sm text-gray-400 italic flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> {t('assignment.status_expected')}
+                            {sub.writingStartedAt && assignment.timeLimit ? (
+                              <div className="flex items-center gap-1 text-indigo-600 font-medium bg-indigo-50 px-2 py-0.5 rounded">
+                                <Clock className="w-3 h-3 animate-pulse" />
+                                {(() => {
+                                  const start = sub.writingStartedAt.toMillis();
+                                  const limit = assignment.timeLimit * 60 * 1000;
+                                  const remaining = Math.max(0, start + limit - now);
+                                  const totalSeconds = Math.floor(remaining / 1000);
+                                  const mins = Math.floor(totalSeconds / 60);
+                                  const secs = totalSeconds % 60;
+                                  return `${mins}:${secs.toString().padStart(2, '0')}`;
+                                })()}
+                              </div>
+                            ) : (
+                              <>
+                                <Clock className="w-3 h-3" /> {t('assignment.status_expected')}
+                              </>
+                            )}
                           </div>
                         ) : (
                           <div className="max-w-xs truncate text-sm text-gray-600 italic">
