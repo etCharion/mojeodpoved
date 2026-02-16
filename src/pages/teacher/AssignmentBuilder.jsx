@@ -196,6 +196,7 @@ export default function AssignmentBuilder() {
   const [reviewsPerSubmission, setReviewsPerSubmission] = useState(3);
   const [reviewStartThreshold, setReviewStartThreshold] = useState(5);
   const [expectedSubmissions, setExpectedSubmissions] = useState('');
+  const [timeLimit, setTimeLimit] = useState('');
   const [isVisible, setIsVisible] = useState(true);
   const [allowSubmissions, setAllowSubmissions] = useState(true);
   const [allowReviews, setAllowReviews] = useState(true);
@@ -225,6 +226,7 @@ export default function AssignmentBuilder() {
           setReviewsPerSubmission(data.reviews_per_submission);
           setReviewStartThreshold(data.review_start_threshold);
           setExpectedSubmissions(data.expected_submissions || '');
+          setTimeLimit(data.timeLimit || '');
           setIsVisible(data.isVisible ?? true);
           setAllowSubmissions(data.allowSubmissions ?? true);
           setAllowReviews(data.allowReviews ?? true);
@@ -333,6 +335,7 @@ export default function AssignmentBuilder() {
       reviews_per_submission: parseInt(reviewsPerSubmission),
       review_start_threshold: parseInt(reviewStartThreshold),
       expected_submissions: expectedSubmissions ? parseInt(expectedSubmissions) : null,
+      timeLimit: timeLimit ? parseInt(timeLimit) : null,
       isVisible,
       allowSubmissions,
       allowReviews,
@@ -395,6 +398,18 @@ export default function AssignmentBuilder() {
               className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 h-32"
               placeholder={t('assignment.what_to_do')}
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('assignment.time_limit')}</label>
+            <input
+              type="number"
+              min="1"
+              value={timeLimit}
+              onChange={(e) => setTimeLimit(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="e.g. 45"
+            />
+            <p className="text-xs text-gray-500 mt-1">{t('assignment.time_limit_desc')}</p>
           </div>
         </section>
 

@@ -149,6 +149,10 @@ const resources = {
         add_option: '+ Přidat možnost',
         save_assignment: 'Uložit úkol',
         error_saving: 'Chyba při ukládání úkolu',
+        time_limit: 'Časový limit na psaní (minuty)',
+        time_limit_desc: 'Pokud je nastaveno, studentům se po začátku psaní spustí odpočet a po jeho uplynutí se práce automaticky odevzdá.',
+        return_submission: 'Vrátit k přepracování',
+        return_confirm: 'Opravdu chcete vrátit tuto práci k přepracování? Tím se smaže aktuální obsah a student bude moci začít znovu.',
 
         // Student view
         submit_work: 'Odevzdejte svou práci',
@@ -172,6 +176,7 @@ const resources = {
         peer_submission: 'Odevzdaná práce spolužáka',
         rubric: 'Rubrika',
         char_required: '{{current}} / {{min}} znaků vyžadováno',
+        time_remaining: 'Zbývající čas: {{time}}',
         submit_review: 'Odeslat recenzi',
         submit_assignment: 'Odevzdat práci',
         error_submitting_work: 'Chyba při odevzdávání práce',
@@ -366,6 +371,10 @@ const resources = {
         add_option: '+ Add Option',
         save_assignment: 'Save Assignment',
         error_saving: 'Error saving assignment',
+        time_limit: 'Writing time limit (minutes)',
+        time_limit_desc: 'If set, a countdown starts when the student begins writing, and the work is automatically submitted when time expires.',
+        return_submission: 'Return for revision',
+        return_confirm: 'Are you sure you want to return this work for revision? This will clear the current content and allow the student to start over.',
 
         // Student view
         submit_work: 'Submit Your Work',
@@ -389,6 +398,7 @@ const resources = {
         peer_submission: 'Peer Submission',
         rubric: 'Rubric',
         char_required: '{{current}} / {{min}} characters required',
+        time_remaining: 'Time remaining: {{time}}',
         submit_review: 'Submit Review',
         submit_assignment: 'Submit Assignment',
         error_submitting_work: 'Error submitting work',
