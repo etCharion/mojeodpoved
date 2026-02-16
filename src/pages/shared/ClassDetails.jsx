@@ -436,11 +436,29 @@ export default function ClassDetails() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    assignment.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {assignment.status === 'open' ? t('common.status').replace('Status', 'Open').toUpperCase() : assignment.status.toUpperCase()}
-                  </span>
+                  {(() => {
+                    let label = t('common.open');
+                    let color = 'bg-green-100 text-green-700';
+
+                    if (assignment.isVisible === false) {
+                      label = t('common.hidden');
+                      color = 'bg-gray-100 text-gray-700';
+                    } else if (assignment.allowSubmissions === false) {
+                      if (assignment.allowReviews !== false) {
+                        label = t('common.open');
+                        color = 'bg-yellow-100 text-yellow-700';
+                      } else {
+                        label = t('common.closed');
+                        color = 'bg-red-100 text-red-700';
+                      }
+                    }
+
+                    return (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${color}`}>
+                        {label}
+                      </span>
+                    );
+                  })()}
                   {isTeacher && (
                     <div className="flex gap-1">
                       <button

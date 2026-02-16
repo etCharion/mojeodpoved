@@ -23,6 +23,9 @@ const resources = {
         pending: 'Čeká na vyřízení',
         pass: 'Splněno',
         fail: 'Nesplněno',
+        open: 'Otevřeno',
+        closed: 'Uzavřeno',
+        hidden: 'Skryto',
         home: 'Úvod',
         settings: 'Nastavení',
         roles: {
@@ -236,6 +239,9 @@ const resources = {
         pending: 'Pending',
         pass: 'Pass',
         fail: 'Fail',
+        open: 'Open',
+        closed: 'Closed',
+        hidden: 'Hidden',
         home: 'Home',
         settings: 'Settings',
         roles: {
