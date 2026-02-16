@@ -74,9 +74,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     }
 
     const timer = setInterval(() => {
+      const limit = assignment.timeLimit * 60 * 1000;
       if (mySubmission.writingStartedAt) {
         const start = mySubmission.writingStartedAt.toMillis();
-        const limit = assignment.timeLimit * 60 * 1000;
         const now = Date.now();
         const remaining = Math.max(0, start + limit - now);
         setTimeLeft(remaining);
@@ -86,6 +86,8 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           // Auto-submit using ref value
           handleSubmitWork();
         }
+      } else {
+        setTimeLeft(limit);
       }
     }, 1000);
 

@@ -28,6 +28,7 @@ const resources = {
         hidden: 'Skryto',
         home: 'Úvod',
         settings: 'Nastavení',
+        minutes: 'Minut',
         roles: {
           teacher: 'Učitel',
           student: 'Student',
@@ -250,6 +251,7 @@ const resources = {
         hidden: 'Hidden',
         home: 'Home',
         settings: 'Settings',
+        minutes: 'Minutes',
         roles: {
           teacher: 'Teacher',
           student: 'Student',
