@@ -1,27 +1,117 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot, collection, query, where, updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, getDocs, setDoc, getDoc } from 'firebase/firestore';
-import { Users, BookOpen, Plus, Check, X, Clipboard, ExternalLink, Trash2, QrCode, Settings } from 'lucide-react';
+import { doc, onSnapshot, collection, query, where, updateDoc, arrayUnion, arrayRemove, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
+import { Users, BookOpen, Plus, Check, X, Clipboard, ExternalLink, Trash2, QrCode, Settings, Copy, ChevronRight, ArrowLeft } from 'lucide-react';
 import * as AllIcons from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import { useTranslation } from 'react-i18next';
 import { CLASS_COLORS, CLASS_ICONS } from '../../lib/constants';
 
+function CopyAssignmentModal({ isOpen, onClose, currentClassId, sourceAssignment, mode, t, user }) {
+  const [classes, setClasses] = useState([]);
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isOpen) {
+      const fetchClasses = async () => {
+        const q = query(collection(db, 'classes'), where('teacherId', '==', user.uid));
+        const snap = await getDocs(q);
+        setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(c => mode === 'select_source' ? c.id !== currentClassId : c.id !== sourceAssignment?.classId));
+      };
+      fetchClasses();
+    }
+  }, [isOpen, user.uid, currentClassId, mode, sourceAssignment]);
+
+  const handleClassSelect = async (classId) => {
+    if (mode === 'select_source') {
+      setSelectedClassId(classId);
+      setLoading(true);
+      const q = query(collection(db, 'assignments'), where('classId', '==', classId));
+      const snap = await getDocs(q);
+      setAssignments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    } else {
+      navigate(`/teacher/assignment/new?classId=${classId}&copyFrom=${sourceAssignment.id}`);
+    }
+  };
+
+  const handleAssignmentSelect = (assignmentId) => {
+    navigate(`/teacher/assignment/new?classId=${currentClassId}&copyFrom=${assignmentId}`);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-xl my-8">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">
+            {mode === 'select_source' ? t('assignment.select_source_assignment') : t('assignment.select_target_class')}
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            <X className="w-6 h-6 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+          {!selectedClassId ? (
+             <div className="grid gap-2">
+               {classes.map(c => (
+                 <button
+                   key={c.id}
+                   onClick={() => handleClassSelect(c.id)}
+                   className="flex items-center justify-between p-4 border rounded-xl hover:bg-indigo-50 hover:border-indigo-200 transition-all text-left"
+                 >
+                   <span className="font-medium">{c.name}</span>
+                   <ChevronRight className="w-5 h-5 text-gray-400" />
+                 </button>
+               ))}
+               {classes.length === 0 && <p className="text-center py-4 text-gray-500">{t('dashboard.no_classes_teacher')}</p>}
+             </div>
+          ) : (
+            <div className="space-y-4">
+              <button
+                onClick={() => setSelectedClassId('')}
+                className="text-indigo-600 text-sm font-medium hover:underline flex items-center gap-1 mb-2"
+              >
+                <ArrowLeft className="w-4 h-4" /> {t('common.back')}
+              </button>
+              <div className="grid gap-2">
+                {assignments.map(a => (
+                  <button
+                    key={a.id}
+                    onClick={() => handleAssignmentSelect(a.id)}
+                    className="flex items-center justify-between p-4 border rounded-xl hover:bg-indigo-50 hover:border-indigo-200 transition-all text-left"
+                  >
+                    <span className="font-medium">{a.title}</span>
+                    <Plus className="w-5 h-5 text-indigo-500" />
+                  </button>
+                ))}
+                {loading && <p className="text-center py-4">{t('common.loading')}</p>}
+                {!loading && assignments.length === 0 && <p className="text-center py-4 text-gray-500">{t('class.no_assignments')}</p>}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ClassSettingsModal({ classInfo, onClose, isTeacher, user, t }) {
   const [name, setName] = useState(classInfo.name);
   const [selectedColor, setSelectedColor] = useState(classInfo.color || 'indigo');
   const [selectedIcon, setSelectedIcon] = useState(classInfo.icon || 'BookOpen');
-  const [personalSettings, setPersonalSettings] = useState({ color: '', icon: '' });
 
   useEffect(() => {
     const fetchPersonal = async () => {
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (userDoc.exists()) {
         const settings = userDoc.data().classSettings?.[classInfo.id] || {};
-        setPersonalSettings(settings);
         if (settings.color) setSelectedColor(settings.color);
         if (settings.icon) setSelectedIcon(settings.icon);
       }
@@ -33,8 +123,6 @@ function ClassSettingsModal({ classInfo, onClose, isTeacher, user, t }) {
     try {
       // Save personal settings
       const userRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userRef);
-      const currentSettings = userDoc.exists() ? (userDoc.data().classSettings || {}) : {};
 
       await updateDoc(userRef, {
         [`classSettings.${classInfo.id}`]: {
@@ -158,6 +246,7 @@ export default function ClassDetails() {
   const [loading, setLoading] = useState(true);
   const [showQRModal, setShowQRModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [copyModal, setCopyModal] = useState({ isOpen: false, mode: 'select_source', sourceAssignment: null });
 
   useEffect(() => {
     if (!classId) return;
@@ -260,6 +349,33 @@ export default function ClassDetails() {
 
   const isTeacher = userData?.role === 'teacher';
 
+  const handleDeleteAssignment = async (e, id) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm(t('assignment.delete_confirm'))) return;
+
+    try {
+      // Delete reviews
+      const qReviews = query(collection(db, 'reviews'), where('assignmentId', '==', id));
+      const snapReviews = await getDocs(qReviews);
+
+      // Delete submissions
+      const qSubmissions = query(collection(db, 'submissions'), where('assignmentId', '==', id));
+      const snapSubmissions = await getDocs(qSubmissions);
+
+      const deletePromises = [
+        ...snapReviews.docs.map(d => deleteDoc(d.ref)),
+        ...snapSubmissions.docs.map(d => deleteDoc(d.ref)),
+        deleteDoc(doc(db, 'assignments', id))
+      ];
+
+      await Promise.all(deletePromises);
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting assignment");
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-start">
@@ -277,13 +393,22 @@ export default function ClassDetails() {
             <Settings className="w-6 h-6" />
           </button>
           {isTeacher && (
-            <Link
-              to={`/teacher/assignment/new?classId=${classId}`}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              <span>{t('class.new_assignment')}</span>
-            </Link>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCopyModal({ isOpen: true, mode: 'select_source', sourceAssignment: null })}
+                className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Copy className="w-5 h-5" />
+                <span>{t('assignment.copy_assignment')}</span>
+              </button>
+              <Link
+                to={`/teacher/assignment/new?classId=${classId}`}
+                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                <span>{t('class.new_assignment')}</span>
+              </Link>
+            </div>
           )}
         </div>
       </div>
@@ -316,6 +441,28 @@ export default function ClassDetails() {
                   }`}>
                     {assignment.status === 'open' ? t('common.status').replace('Status', 'Open').toUpperCase() : assignment.status.toUpperCase()}
                   </span>
+                  {isTeacher && (
+                    <div className="flex gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setCopyModal({ isOpen: true, mode: 'select_target', sourceAssignment: assignment });
+                        }}
+                        className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        title={t('assignment.copy_assignment')}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteAssignment(e, assignment.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        title={t('common.delete')}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                   <ExternalLink className="w-4 h-4 text-gray-400" />
                 </div>
               </Link>
@@ -436,6 +583,19 @@ export default function ClassDetails() {
           </div>
         )}
       </div>
+
+      {/* Copy Modal */}
+      {copyModal.isOpen && (
+        <CopyAssignmentModal
+          isOpen={copyModal.isOpen}
+          onClose={() => setCopyModal({ ...copyModal, isOpen: false })}
+          currentClassId={classId}
+          sourceAssignment={copyModal.sourceAssignment}
+          mode={copyModal.mode}
+          t={t}
+          user={user}
+        />
+      )}
 
       {/* Settings Modal */}
       {showSettingsModal && (
