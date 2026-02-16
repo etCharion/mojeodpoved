@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { EditorContent } from '@tiptap/react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { collection, addDoc, doc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, RefreshCw, Users, BookOpen, ArrowLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
@@ -14,6 +14,11 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const { t } = useTranslation();
   const { user } = useAuth();
   const [text, setText] = useState('');
+  const textRef = useRef('');
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
+
   const [submitting, setSubmitting] = useState(false);
   const [activeReview, setActiveReview] = useState(null);
   const [viewingReview, setViewingReview] = useState(null);
@@ -23,6 +28,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const [isEraserActive, setIsEraserActive] = useState(false);
   const [hoveredRatings, setHoveredRatings] = useState({});
   const [metaReviewNotes, setMetaReviewNotes] = useState({});
+  const [timeLeft, setTimeLeft] = useState(null);
 
   // Tiptap editors for review mode
   const submissionEditor = useRichTextEditor({
@@ -57,8 +63,35 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   }, [activeReview?.id]);
 
   const mySubmission = submissions.find(s => s.studentId === user.uid);
+  const isSubmitted = mySubmission && mySubmission.status !== 'expected';
   const myReviewsGiven = reviews.filter(r => r.reviewerId === user.uid);
   const myReviewsReceived = reviews.filter(r => r.authorId === user.uid && r.status === 'completed');
+
+  useEffect(() => {
+    if (!assignment.timeLimit || !mySubmission || isSubmitted) {
+      setTimeLeft(null);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      if (mySubmission.writingStartedAt) {
+        const start = mySubmission.writingStartedAt.toMillis();
+        const limit = assignment.timeLimit * 60 * 1000;
+        const now = Date.now();
+        const remaining = Math.max(0, start + limit - now);
+        setTimeLeft(remaining);
+
+        if (remaining === 0) {
+          clearInterval(timer);
+          // Auto-submit using ref value
+          handleSubmitWork();
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignment.timeLimit, mySubmission?.writingStartedAt, isSubmitted]);
 
   useEffect(() => {
     const createPlaceholder = async () => {
@@ -89,9 +122,25 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const reviewsNeeded = assignment.reviews_per_submission;
   const reviewsCompleted = myReviewsGiven.filter(r => r.status === 'completed').length;
 
+  const formatTime = (ms) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handleSubmitWork = async (e) => {
-    e.preventDefault();
-    if (!text.trim()) return;
+    if (e) e.preventDefault();
+
+    const currentText = textRef.current;
+
+    // Allow empty submission for auto-submit if time runs out, but check trim for manual
+    if (!e && !currentText.trim()) {
+       // auto-submitting empty text is allowed
+    } else if (e && !currentText.trim()) {
+       return;
+    }
+
     setSubmitting(true);
     try {
       const subId = `${assignment.id}_${user.uid}`;
@@ -100,7 +149,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
         classId: assignment.classId,
         studentId: user.uid,
         studentName: user.displayName,
-        content: { text },
+        content: { text: currentText },
         status: 'submitted',
         updatedAt: serverTimestamp()
       }, { merge: true });
@@ -160,9 +209,23 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     });
   };
 
-  // UI rendering based on status
-  const isSubmitted = mySubmission && mySubmission.status !== 'expected';
+  const handleTextChange = async (e) => {
+    const newText = e.target.value;
+    setText(newText);
 
+    if (assignment.timeLimit && !mySubmission?.writingStartedAt) {
+      const subId = `${assignment.id}_${user.uid}`;
+      try {
+        await updateDoc(doc(db, 'submissions', subId), {
+          writingStartedAt: serverTimestamp()
+        });
+      } catch (err) {
+        console.error("Error starting timer:", err);
+      }
+    }
+  };
+
+  // UI rendering based on status
   if (!isSubmitted) {
     return (
       <div className="space-y-8">
@@ -179,13 +242,21 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
         {assignment.allowSubmissions !== false ? (
           <form onSubmit={handleSubmitWork} className="bg-white p-6 rounded-xl border shadow-sm space-y-4">
-            <h2 className="text-xl font-semibold">{t('assignment.submit_work')}</h2>
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold">{t('assignment.submit_work')}</h2>
+              {timeLeft !== null && (
+                <div className={`flex items-center gap-2 font-mono font-bold px-3 py-1.5 rounded-lg border ${timeLeft < 60000 ? 'text-red-600 border-red-200 bg-red-50 animate-pulse' : 'text-indigo-600 border-indigo-100 bg-indigo-50'}`}>
+                  <Clock className="w-4 h-4" />
+                  {t('assignment.time_remaining', { time: formatTime(timeLeft) })}
+                </div>
+              )}
+            </div>
             <textarea
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={handleTextChange}
               className="w-full h-64 p-4 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
               placeholder={t('assignment.type_response')}
-              required
+              required={timeLeft === null} // Not required if auto-submitting
             />
             <button
               type="submit"

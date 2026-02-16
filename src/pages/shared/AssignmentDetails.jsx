@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
 import { doc, onSnapshot, collection, query, where, updateDoc, deleteDoc, getDocs, serverTimestamp } from 'firebase/firestore';
-import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send, ChevronDown, ChevronUp, ArrowUpDown, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send, ChevronDown, ChevronUp, ArrowUpDown, CheckCircle2, XCircle, Clock, RotateCcw } from 'lucide-react';
 import StudentAssignmentView from '../student/StudentAssignmentView';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
@@ -101,6 +101,38 @@ export default function AssignmentDetails() {
     } catch (err) {
       console.error(err);
       alert("Error deleting submission");
+    }
+  };
+
+  const handleReturnSubmission = async (sub) => {
+    if (!window.confirm(t('assignment.return_confirm'))) return;
+    try {
+      // 1. Delete reviews where this submission is the target
+      const q1 = query(collection(db, 'reviews'), where('submissionId', '==', sub.id));
+      const snap1 = await getDocs(q1);
+
+      // 2. Delete reviews where this student is the reviewer
+      const q2 = query(collection(db, 'reviews'), where('reviewerId', '==', sub.studentId), where('assignmentId', '==', assignmentId));
+      const snap2 = await getDocs(q2);
+
+      const deletePromises = [
+        ...snap1.docs.map(d => deleteDoc(d.ref)),
+        ...snap2.docs.map(d => deleteDoc(d.ref))
+      ];
+      await Promise.all(deletePromises);
+
+      // 3. Reset the submission
+      await updateDoc(doc(db, 'submissions', sub.id), {
+        status: 'expected',
+        content: null,
+        writingStartedAt: null,
+        reviewCount: 0,
+        assignedCount: 0,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Error returning submission");
     }
   };
 
@@ -382,6 +414,13 @@ export default function AssignmentDetails() {
                           ) : (
                             <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">{t('assignment.status_submitted')}</span>
                           )}
+                          <button
+                            onClick={() => handleReturnSubmission(sub)}
+                            className="text-orange-300 hover:text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                            title={t('assignment.return_submission')}
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => handleDeleteSubmission(sub)}
                             className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
