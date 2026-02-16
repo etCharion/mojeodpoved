@@ -161,7 +161,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   };
 
   // UI rendering based on status
-  if (!mySubmission) {
+  const isSubmitted = mySubmission && mySubmission.status !== 'expected';
+
+  if (!isSubmitted) {
     return (
       <div className="space-y-8">
         <div className="flex items-center gap-4">
@@ -191,7 +193,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition-colors disabled:bg-gray-400"
             >
               <Send className="w-5 h-5" />
-              {submitting ? t('common.loading') : t('assignment.submit_review').replace('Review', 'Assignment')}
+              {submitting ? t('common.loading') : t('assignment.submit_assignment')}
             </button>
           </form>
         ) : (
