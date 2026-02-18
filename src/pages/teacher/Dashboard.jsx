@@ -79,7 +79,7 @@ function SortableClassCard({ cls, userSettings, t }) {
       <div className="flex items-center gap-4 text-sm text-gray-500">
         <div className="flex items-center gap-1">
           <Icons.Users className="w-4 h-4" />
-          <span>{(cls.studentEmails?.length || 0) + (cls.studentUids?.length || 0)} {t('dashboard.students_count')}</span>
+          <span>{cls.studentEmails?.length || 0} {t('dashboard.students_count')}</span>
         </div>
       </div>
     </div>
