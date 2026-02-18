@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { EditorContent } from '@tiptap/react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, RefreshCw, Users, BookOpen, ArrowLeft } from 'lucide-react';
+import { doc, updateDoc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, RefreshCw, Users, BookOpen, ArrowLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
 import { useRichTextEditor, EditorToolbar, RichTextRenderer } from '../../components/RichTextEditor';
@@ -27,6 +27,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const [activeColor, setActiveColor] = useState(null);
   const [isEraserActive, setIsEraserActive] = useState(false);
   const [hoveredRatings, setHoveredRatings] = useState({});
+  const [hoveredAgreementRatings, setHoveredAgreementRatings] = useState({});
   const [metaReviewNotes, setMetaReviewNotes] = useState({});
   const [timeLeft, setTimeLeft] = useState(null);
 
@@ -190,10 +191,10 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
         completedAt: serverTimestamp()
       });
 
-      // Update the submission's reviewCount
+      // Update the submission's reviewCount atomically
       const subRef = doc(db, 'submissions', activeReview.submissionId);
       await updateDoc(subRef, {
-        reviewCount: ((submissions || []).find(s => s.id === activeReview.submissionId)?.reviewCount || 0) + 1
+        reviewCount: increment(1)
       });
 
       // Trigger next review assignment
@@ -207,9 +208,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     }
   };
 
-  const handleMetaReview = async (reviewId, status, note) => {
+  const handleMetaReview = async (reviewId, rating, note) => {
     await updateDoc(doc(db, 'reviews', reviewId), {
-      agreement: { status, note, updatedAt: serverTimestamp() }
+      agreement: { rating, note, updatedAt: serverTimestamp() }
     });
   };
 
@@ -478,13 +479,18 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               </div>
             </div>
 
-            {viewingReview.agreement?.status && (
+            {viewingReview.agreement?.rating && (
               <div className="bg-white p-6 rounded-xl border space-y-4">
                  <h3 className="text-sm font-bold text-gray-500 uppercase">{t('assignment.agreement_status')}</h3>
-                 <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${viewingReview.agreement.status === 'agree' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {viewingReview.agreement.status === 'agree' ? t('assignment.you_agreed') : t('assignment.you_disagreed')}
-                    </span>
+                 <div className="flex items-center gap-4">
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`w-4 h-4 ${star <= viewingReview.agreement.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`}
+                        />
+                      ))}
+                    </div>
                     {viewingReview.agreement.note && (
                       <span className="text-sm text-gray-500 italic">— "{viewingReview.agreement.note}"</span>
                     )}
@@ -618,21 +624,35 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                 {/* Meta-Review / Agreement */}
                 <div className="pt-4 border-t space-y-3">
                   <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">{t('assignment.do_you_agree')}</p>
-                  {!rev.agreement?.status ? (
-                    <div className="space-y-2">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleMetaReview(rev.id, 'agree', metaReviewNotes[rev.id] || '')}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-xs font-bold hover:bg-green-100"
+                  {!rev.agreement?.rating ? (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div
+                          className="flex gap-1"
+                          onMouseLeave={() => setHoveredAgreementRatings(prev => ({ ...prev, [rev.id]: 0 }))}
                         >
-                          <ThumbsUp className="w-3.5 h-3.5" /> {t('assignment.agree')}
-                        </button>
-                        <button
-                          onClick={() => handleMetaReview(rev.id, 'disagree', metaReviewNotes[rev.id] || '')}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100"
-                        >
-                          <ThumbsDown className="w-3.5 h-3.5" /> {t('assignment.disagree')}
-                        </button>
+                          {[1, 2, 3, 4, 5].map((star) => {
+                            const isHovered = star <= (hoveredAgreementRatings[rev.id] || 0);
+                            return (
+                              <button
+                                key={star}
+                                type="button"
+                                onMouseEnter={() => setHoveredAgreementRatings(prev => ({ ...prev, [rev.id]: star }))}
+                                onClick={() => handleMetaReview(rev.id, star, metaReviewNotes[rev.id] || '')}
+                                className="focus:outline-none transition-transform hover:scale-110"
+                                title={star === 1 ? t('assignment.strongly_disagree') : star === 5 ? t('assignment.strongly_agree') : ''}
+                              >
+                                <Star
+                                  className={`w-6 h-6 ${isHovered ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`}
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="flex justify-between text-[10px] text-gray-400 font-medium uppercase px-0.5">
+                          <span>{t('assignment.strongly_disagree')}</span>
+                          <span>{t('assignment.strongly_agree')}</span>
+                        </div>
                       </div>
                       <input
                         type="text"
@@ -643,10 +663,15 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                       />
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${rev.agreement.status === 'agree' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {rev.agreement.status === 'agree' ? t('assignment.you_agreed') : t('assignment.you_disagreed')}
-                      </span>
+                    <div className="flex items-center gap-3">
+                      <div className="flex gap-0.5">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star
+                            key={star}
+                            className={`w-3.5 h-3.5 ${star <= rev.agreement.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`}
+                          />
+                        ))}
+                      </div>
                       {rev.agreement.note && <span className="text-xs text-gray-500 italic">"{rev.agreement.note}"</span>}
                     </div>
                   )}

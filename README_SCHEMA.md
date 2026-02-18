@@ -38,8 +38,8 @@
 - `studentId`: string
 - `studentName`: string
 - `content`: { text: string }
-- `reviewCount`: number (how many reviews it has RECEIVED)
-- `assignedCount`: number (how many reviewers it has been ASSIGNED to)
+- `reviewCount`: number (how many reviews it has COMPLETED/RECEIVED)
+- `assignedCount`: number (how many reviewers it has been ASSIGNED to, including pending ones)
 - `createdAt`: timestamp
 
 ### `reviews`
@@ -52,5 +52,5 @@
 - `status`: 'assigned' | 'completed'
 - `ratings`: { [criteriaId]: number }
 - `feedback`: string
-- `agreement`: { status: 'agree' | 'disagree' | null, note: string }
+- `agreement`: { rating: number | null, note: string }
 - `createdAt`: timestamp

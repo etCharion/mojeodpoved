@@ -203,6 +203,8 @@ const resources = {
         review_given_detail: 'Detail vaší odeslané recenze',
         review_received_detail: 'Detail obdržené recenze',
         agreement_status: 'Stav souhlasu',
+        strongly_disagree: 'Rozhodně nesouhlasím',
+        strongly_agree: 'Rozhodně souhlasím',
       },
       editor: {
         bold: 'Tučně',
@@ -424,6 +426,8 @@ const resources = {
         review_given_detail: 'Your Submitted Review Detail',
         review_received_detail: 'Received Review Detail',
         agreement_status: 'Agreement Status',
+        strongly_disagree: 'Strongly disagree',
+        strongly_agree: 'Strongly agree',
       },
       editor: {
         bold: 'Bold',
