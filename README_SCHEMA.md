@@ -52,5 +52,5 @@
 - `status`: 'assigned' | 'completed'
 - `ratings`: { [criteriaId]: number }
 - `feedback`: string
-- `agreement`: { status: 'agree' | 'disagree' | null, note: string }
+- `agreement`: { rating: number | null, note: string }
 - `createdAt`: timestamp
