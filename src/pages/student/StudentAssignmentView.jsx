@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { EditorContent } from '@tiptap/react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, RefreshCw, Users, BookOpen, ArrowLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
@@ -188,10 +188,10 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
         completedAt: serverTimestamp()
       });
 
-      // Update the submission's reviewCount
+      // Update the submission's reviewCount atomically
       const subRef = doc(db, 'submissions', activeReview.submissionId);
       await updateDoc(subRef, {
-        reviewCount: (submissions.find(s => s.id === activeReview.submissionId)?.reviewCount || 0) + 1
+        reviewCount: increment(1)
       });
 
       // Trigger next review assignment

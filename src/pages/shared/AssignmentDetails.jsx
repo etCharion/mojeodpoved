@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot, collection, query, where, updateDoc, deleteDoc, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, updateDoc, deleteDoc, getDocs, serverTimestamp, increment } from 'firebase/firestore';
 import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send, ChevronDown, ChevronUp, ArrowUpDown, CheckCircle2, XCircle, Clock, RotateCcw } from 'lucide-react';
 import StudentAssignmentView from '../student/StudentAssignmentView';
 import Breadcrumbs from '../../components/Breadcrumbs';
@@ -57,7 +57,24 @@ export default function AssignmentDetails() {
 
   const handleDeleteReview = async (reviewId) => {
     if (!window.confirm(t('assignment.delete_review_confirm'))) return;
-    await deleteDoc(doc(db, 'reviews', reviewId));
+    const review = reviews.find(r => r.id === reviewId);
+    if (!review) return;
+
+    try {
+      await deleteDoc(doc(db, 'reviews', reviewId));
+
+      // Decrement counters on the target submission
+      const subRef = doc(db, 'submissions', review.submissionId);
+      const updates = {
+        assignedCount: increment(-1)
+      };
+      if (review.status === 'completed') {
+        updates.reviewCount = increment(-1);
+      }
+      await updateDoc(subRef, updates);
+    } catch (err) {
+      console.error("Error deleting review:", err);
+    }
   };
 
   const handleDeleteAssignment = async () => {
@@ -89,17 +106,24 @@ export default function AssignmentDetails() {
   const handleDeleteSubmission = async (sub) => {
     if (!window.confirm(t('assignment.delete_submission_confirm'))) return;
     try {
-      // Delete reviews where this submission is the target
+      // 1. Delete reviews where this submission is the target
       const q1 = query(collection(db, 'reviews'), where('submissionId', '==', sub.id));
       const snap1 = await getDocs(q1);
 
-      // Delete reviews where this student is the reviewer
+      // 2. Delete reviews where this student is the reviewer
       const q2 = query(collection(db, 'reviews'), where('reviewerId', '==', sub.studentId), where('assignmentId', '==', assignmentId));
       const snap2 = await getDocs(q2);
 
       const deletePromises = [
         ...snap1.docs.map(d => deleteDoc(d.ref)),
-        ...snap2.docs.map(d => deleteDoc(d.ref)),
+        ...snap2.docs.map(d => {
+          const reviewData = d.data();
+          // For reviews this student wrote, decrement counters on THEIR targets
+          const targetSubRef = doc(db, 'submissions', reviewData.submissionId);
+          const updates = { assignedCount: increment(-1) };
+          if (reviewData.status === 'completed') updates.reviewCount = increment(-1);
+          return [deleteDoc(d.ref), updateDoc(targetSubRef, updates)];
+        }).flat(),
         deleteDoc(doc(db, 'submissions', sub.id))
       ];
 
@@ -123,7 +147,13 @@ export default function AssignmentDetails() {
 
       const deletePromises = [
         ...snap1.docs.map(d => deleteDoc(d.ref)),
-        ...snap2.docs.map(d => deleteDoc(d.ref))
+        ...snap2.docs.map(d => {
+          const reviewData = d.data();
+          const targetSubRef = doc(db, 'submissions', reviewData.submissionId);
+          const updates = { assignedCount: increment(-1) };
+          if (reviewData.status === 'completed') updates.reviewCount = increment(-1);
+          return [deleteDoc(d.ref), updateDoc(targetSubRef, updates)];
+        }).flat()
       ];
       await Promise.all(deletePromises);
 
