@@ -52,7 +52,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   // Reset editors when active review changes
   useEffect(() => {
     if (activeReview) {
-      const targetSub = submissions.find(s => s.id === activeReview.submissionId);
+      const targetSub = (submissions || []).find(s => s.id === activeReview.submissionId);
       const initialContent = targetSub?.content?.text || '';
       // Wrap plain text in <p> if it's not HTML
       const htmlContent = initialContent.startsWith('<') ? initialContent : `<p>${initialContent}</p>`;
@@ -63,10 +63,10 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     }
   }, [activeReview?.id]);
 
-  const mySubmission = submissions.find(s => s.studentId === user.uid);
+  const mySubmission = (submissions || []).find(s => s.studentId === user.uid);
   const isSubmitted = mySubmission && mySubmission.status !== 'expected';
-  const myReviewsGiven = reviews.filter(r => r.reviewerId === user.uid);
-  const myReviewsReceived = reviews.filter(r => r.authorId === user.uid && r.status === 'completed');
+  const myReviewsGiven = (reviews || []).filter(r => r.reviewerId === user.uid);
+  const myReviewsReceived = (reviews || []).filter(r => r.authorId === user.uid && r.status === 'completed');
 
   useEffect(() => {
     if (!assignment.timeLimit || !mySubmission || isSubmitted) {
@@ -98,6 +98,8 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
   useEffect(() => {
     const createPlaceholder = async () => {
+      if (!submissions) return;
+
       // Only create placeholder for students if it doesn't exist yet
       if (user && assignment && !mySubmission && assignment.allowSubmissions !== false) {
         const subId = `${assignment.id}_${user.uid}`;
@@ -118,9 +120,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       }
     };
     createPlaceholder();
-  }, [user, assignment, !!mySubmission]);
+  }, [user, assignment, !!mySubmission, !!submissions]);
 
-  const submittedCount = submissions.filter(s => s.status !== 'expected').length;
+  const submittedCount = (submissions || []).filter(s => s.status !== 'expected').length;
   const canReview = submittedCount >= assignment.review_start_threshold;
   const reviewsNeeded = assignment.reviews_per_submission;
   const reviewsCompleted = myReviewsGiven.filter(r => r.status === 'completed').length;
@@ -423,7 +425,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
     const targetSubmissionId = viewingReview.submissionId;
     // For received reviews, show my own submission. For given reviews, show the peer's submission.
-    const targetSubmission = isReceived ? mySubmission : submissions.find(s => s.id === targetSubmissionId);
+    const targetSubmission = isReceived ? mySubmission : (submissions || []).find(s => s.id === targetSubmissionId);
 
     return (
       <div className="space-y-8 pb-20">

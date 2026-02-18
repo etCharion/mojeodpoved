@@ -17,8 +17,8 @@ export default function AssignmentDetails() {
   const { userData } = useAuth();
   const navigate = useNavigate();
   const [assignment, setAssignment] = useState(null);
-  const [submissions, setSubmissions] = useState([]);
-  const [reviews, setReviews] = useState([]);
+  const [submissions, setSubmissions] = useState(null);
+  const [reviews, setReviews] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expandedReviews, setExpandedReviews] = useState(new Set());
   const [expandedSubmissions, setExpandedSubmissions] = useState(new Set());
@@ -32,10 +32,15 @@ export default function AssignmentDetails() {
 
   useEffect(() => {
     if (!assignmentId) return;
+    setLoading(true);
+    setSubmissions(null);
+    setReviews(null);
 
     const unsubAssignment = onSnapshot(doc(db, 'assignments', assignmentId), (doc) => {
       if (doc.exists()) {
         setAssignment({ id: doc.id, ...doc.data() });
+      } else {
+        setAssignment(null);
       }
       setLoading(false);
     });
@@ -182,7 +187,7 @@ export default function AssignmentDetails() {
     }
   };
 
-  if (loading) return <div>{t('common.loading')}</div>;
+  if (loading || submissions === null || reviews === null) return <div>{t('common.loading')}</div>;
   if (!assignment) return <div>{t('common.unknown').replace('Unknown', 'Assignment not found')}</div>;
 
   const isTeacher = userData?.role === 'teacher';
