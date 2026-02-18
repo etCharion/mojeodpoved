@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
 import { doc, onSnapshot, collection, query, where, updateDoc, deleteDoc, getDocs, serverTimestamp, increment } from 'firebase/firestore';
-import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send, ChevronDown, ChevronUp, ArrowUpDown, CheckCircle2, XCircle, Clock, RotateCcw } from 'lucide-react';
+import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send, ChevronDown, ChevronUp, ArrowUpDown, Clock, RotateCcw } from 'lucide-react';
 import StudentAssignmentView from '../student/StudentAssignmentView';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
@@ -608,10 +608,14 @@ export default function AssignmentDetails() {
                       <span className="text-sm font-bold text-indigo-600 truncate">{review.reviewerName}</span>
                       <span className="text-gray-400 text-xs">→</span>
                       <span className="text-sm font-medium text-gray-700 truncate">{authorName}</span>
-                      {review.agreement?.status && (
-                        <span className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase border ${review.agreement.status === 'agree' ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
-                          {review.agreement.status === 'agree' ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                          {review.agreement.status === 'agree' ? t('assignment.agree') : t('assignment.disagree')}
+                      {review.agreement?.rating && (
+                        <span className="flex items-center gap-0.5 px-2 py-0.5 rounded bg-gray-50 border border-gray-100">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              className={`w-2.5 h-2.5 ${star <= review.agreement.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`}
+                            />
+                          ))}
                         </span>
                       )}
                     </div>
@@ -661,13 +665,18 @@ export default function AssignmentDetails() {
                           <MessageSquare className="absolute -top-3 -left-3 w-6 h-6 text-indigo-100 fill-current" />
                           <RichTextRenderer content={review.feedback} />
                         </div>
-                        {review.agreement?.status && (
+                        {review.agreement?.rating && (
                           <div className="p-3 rounded-lg border bg-white shadow-sm space-y-2">
                             <p className="text-[10px] font-bold text-gray-400 uppercase">{t('assignment.agreement_status')}</p>
-                            <div className="flex items-center gap-2">
-                              <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${review.agreement.status === 'agree' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                {review.agreement.status === 'agree' ? t('assignment.agreed_by_author') : t('assignment.disagreed_by_author')}
-                              </span>
+                            <div className="flex items-center gap-3">
+                              <div className="flex gap-0.5">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <Star
+                                    key={star}
+                                    className={`w-3.5 h-3.5 ${star <= review.agreement.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`}
+                                  />
+                                ))}
+                              </div>
                               {review.agreement.note && <span className="text-xs text-gray-500">— {review.agreement.note}</span>}
                             </div>
                           </div>
