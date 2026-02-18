@@ -280,7 +280,7 @@ export default function AssignmentDetails() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-xl border">
           <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t('assignment.submissions')}</p>
           <p className="text-4xl font-bold mt-2">
@@ -293,26 +293,6 @@ export default function AssignmentDetails() {
           <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t('assignment.reviews_completed')}</p>
           <p className="text-4xl font-bold mt-2">{reviews.filter(r => r.status === 'completed').length}</p>
           <p className="text-sm text-gray-400 mt-1">{t('assignment.total_assigned', { count: reviews.length })}</p>
-        </div>
-        <div className="bg-white p-6 rounded-xl border">
-          <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t('assignment.average_score')}</p>
-          <p className="text-4xl font-bold mt-2">
-            {(() => {
-              const passFailIds = new Set(assignment.rubric?.filter(i => i.type === 'passfail').map(i => i.id) || []);
-              const completedReviews = reviews.filter(r => r.status === 'completed');
-              if (completedReviews.length === 0) return '0.0';
-
-              const totalSum = completedReviews.reduce((acc, r) => {
-                const ratings = Object.entries(r.ratings || {})
-                  .filter(([id]) => !passFailIds.has(id))
-                  .map(([, val]) => val);
-                if (ratings.length === 0) return acc;
-                return acc + (ratings.reduce((a, b) => a + b, 0) / ratings.length);
-              }, 0);
-              return (totalSum / completedReviews.length).toFixed(1);
-            })()}
-          </p>
-          <p className="text-sm text-gray-400 mt-1">{t('assignment.across_criteria')}</p>
         </div>
       </div>
 
@@ -587,12 +567,6 @@ export default function AssignmentDetails() {
             const authorSubmission = submissions.find(s => s.id === review.submissionId);
             const authorName = authorSubmission?.studentName || t('common.unknown');
 
-            const passFailIds = new Set(assignment.rubric?.filter(i => i.type === 'passfail').map(i => i.id) || []);
-            const numericRatings = Object.entries(review.ratings || {})
-              .filter(([id]) => !passFailIds.has(id))
-              .map(([, val]) => val);
-            const avgRating = numericRatings.length > 0 ? (numericRatings.reduce((a, b) => a + b, 0) / numericRatings.length).toFixed(1) : null;
-
             return (
               <div key={review.id} id={`review-${review.id}`} className="group transition-colors">
                 <div
@@ -604,11 +578,6 @@ export default function AssignmentDetails() {
                       <span className="text-sm font-bold text-indigo-600 truncate">{review.reviewerName}</span>
                       <span className="text-gray-400 text-xs">→</span>
                       <span className="text-sm font-medium text-gray-700 truncate">{authorName}</span>
-                      {avgRating && (
-                        <span className="flex items-center gap-1 bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded text-xs font-bold border border-yellow-100">
-                          {avgRating} <Star className="w-3 h-3 fill-current" />
-                        </span>
-                      )}
                       {review.agreement?.status && (
                         <span className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase border ${review.agreement.status === 'agree' ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
                           {review.agreement.status === 'agree' ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
