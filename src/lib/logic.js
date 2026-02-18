@@ -1,5 +1,50 @@
 import { db } from './firebase';
-import { collection, query, where, getDocs, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, serverTimestamp, runTransaction, increment } from 'firebase/firestore';
+
+const tryAssignReview = async (reviewerId, reviewerName, candidate, assignmentId, classId, N) => {
+  try {
+    return await runTransaction(db, async (transaction) => {
+      const subRef = doc(db, 'submissions', candidate.id);
+      const subSnap = await transaction.get(subRef);
+      if (!subSnap.exists()) return false;
+
+      const subData = subSnap.data();
+      const currentAssigned = subData.assignedCount || 0;
+
+      // Double check current reviews for this submission to be sure
+      // (assignedCount might be out of sync if reviews were deleted manually)
+      if (currentAssigned >= N) return false;
+
+      const reviewId = `${reviewerId}_${candidate.id}`;
+      const reviewRef = doc(db, 'reviews', reviewId);
+      const reviewSnap = await transaction.get(reviewRef);
+
+      if (reviewSnap.exists()) return false;
+
+      transaction.set(reviewRef, {
+        assignmentId,
+        classId,
+        submissionId: candidate.id,
+        reviewerId,
+        reviewerName,
+        authorId: subData.studentId,
+        status: 'assigned',
+        ratings: {},
+        feedback: '',
+        createdAt: serverTimestamp()
+      });
+
+      transaction.update(subRef, {
+        assignedCount: increment(1)
+      });
+
+      return true;
+    });
+  } catch (err) {
+    console.error("Atomic Assignment Error:", err);
+    return false;
+  }
+};
 
 export const runDistribution = async (assignmentId) => {
   try {
@@ -40,22 +85,25 @@ export const runDistribution = async (assignmentId) => {
     // Map to track who is reviewing what
     const assignmentsMap = {}; // reviewerId -> [submissionId]
     const receivedCountMap = {}; // submissionId -> count
-
     const completedCountMap = {}; // reviewerId -> count of completed reviews
 
     submittedWorks.forEach(s => {
       assignmentsMap[s.studentId] = [];
-      receivedCountMap[s.id] = 0;
       completedCountMap[s.studentId] = 0;
     });
 
     reviews.forEach(r => {
       if (!assignmentsMap[r.reviewerId]) assignmentsMap[r.reviewerId] = [];
       assignmentsMap[r.reviewerId].push(r.submissionId);
-      receivedCountMap[r.submissionId] = (receivedCountMap[r.submissionId] || 0) + 1;
       if (r.status === 'completed') {
         completedCountMap[r.reviewerId] = (completedCountMap[r.reviewerId] || 0) + 1;
       }
+    });
+
+    submittedWorks.forEach(s => {
+      const reviewsForThisSub = reviews.filter(r => r.submissionId === s.id).length;
+      // We take the max of assignedCount and actual reviews to be safe
+      receivedCountMap[s.id] = Math.max(s.assignedCount || 0, reviewsForThisSub);
     });
 
     // 4. Distribution Loop
@@ -74,6 +122,7 @@ export const runDistribution = async (assignmentId) => {
       while (assignedToMe < targetLimit && assignedToMe < N) {
         const candidates = submittedWorks
           .filter(s => s.studentId !== studentId && !assignmentsMap[studentId].includes(s.id))
+          .filter(s => (receivedCountMap[s.id] || 0) < N) // Strict limit check
           .sort((a, b) => {
             const diff = (receivedCountMap[a.id] || 0) - (receivedCountMap[b.id] || 0);
             if (diff !== 0) return diff;
@@ -82,25 +131,20 @@ export const runDistribution = async (assignmentId) => {
 
         if (candidates.length === 0) break;
 
-        const bestCandidate = candidates[0];
-        const reviewId = `${studentId}_${bestCandidate.id}`;
+        let successfullyAssigned = false;
+        // Try candidates one by one until one succeeds (transactionally)
+        for (const candidate of candidates) {
+          const success = await tryAssignReview(studentId, studentSub.studentName, candidate, assignmentId, studentSub.classId, N);
+          if (success) {
+            assignmentsMap[studentId].push(candidate.id);
+            receivedCountMap[candidate.id] = (receivedCountMap[candidate.id] || 0) + 1;
+            assignedToMe++;
+            successfullyAssigned = true;
+            break;
+          }
+        }
 
-        await setDoc(doc(db, 'reviews', reviewId), {
-          assignmentId,
-          classId: studentSub.classId,
-          submissionId: bestCandidate.id,
-          reviewerId: studentId,
-          reviewerName: studentSub.studentName,
-          authorId: bestCandidate.studentId,
-          status: 'assigned',
-          ratings: {},
-          feedback: '',
-          createdAt: serverTimestamp()
-        });
-
-        assignmentsMap[studentId].push(bestCandidate.id);
-        receivedCountMap[bestCandidate.id] = (receivedCountMap[bestCandidate.id] || 0) + 1;
-        assignedToMe++;
+        if (!successfullyAssigned) break; // No more candidates can be assigned right now
       }
     }
   } catch (err) {
