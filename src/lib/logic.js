@@ -1,19 +1,29 @@
 import { db } from './firebase';
 import { collection, query, where, getDocs, doc, serverTimestamp, runTransaction, increment } from 'firebase/firestore';
 
-const tryAssignReview = async (reviewerId, reviewerName, candidate, assignmentId, classId, N) => {
+const tryAssignReview = async (reviewerId, reviewerName, candidate, assignmentId, classId, N, targetLimit) => {
   try {
     return await runTransaction(db, async (transaction) => {
+      const reviewerSubId = `${assignmentId}_${reviewerId}`;
+      const reviewerSubRef = doc(db, 'submissions', reviewerSubId);
       const subRef = doc(db, 'submissions', candidate.id);
-      const subSnap = await transaction.get(subRef);
-      if (!subSnap.exists()) return false;
 
+      const [reviewerSnap, subSnap] = await Promise.all([
+        transaction.get(reviewerSubRef),
+        transaction.get(subRef)
+      ]);
+
+      if (!reviewerSnap.exists() || !subSnap.exists()) return false;
+
+      const reviewerData = reviewerSnap.data();
       const subData = subSnap.data();
-      const currentAssigned = subData.assignedCount || 0;
 
-      // Double check current reviews for this submission to be sure
-      // (assignedCount might be out of sync if reviews were deleted manually)
-      if (currentAssigned >= N) return false;
+      const currentGiven = reviewerData.givenReviewsCount || 0;
+      const currentReceived = subData.assignedCount || 0;
+
+      // Double check limits inside transaction to prevent race conditions
+      if (currentGiven >= targetLimit || currentGiven >= N) return false;
+      if (currentReceived >= N) return false;
 
       const reviewId = `${reviewerId}_${candidate.id}`;
       const reviewRef = doc(db, 'reviews', reviewId);
@@ -36,6 +46,10 @@ const tryAssignReview = async (reviewerId, reviewerName, candidate, assignmentId
 
       transaction.update(subRef, {
         assignedCount: increment(1)
+      });
+
+      transaction.update(reviewerSubRef, {
+        givenReviewsCount: increment(1)
       });
 
       return true;
@@ -86,18 +100,16 @@ export const runDistribution = async (assignmentId) => {
     const assignmentsMap = {}; // reviewerId -> [submissionId]
     const receivedCountMap = {}; // submissionId -> count
     const completedCountMap = {}; // reviewerId -> count of completed reviews
+    const assignedToMeCountMap = {}; // reviewerId -> count of assigned reviews
 
     submittedWorks.forEach(s => {
       assignmentsMap[s.studentId] = [];
-      completedCountMap[s.studentId] = 0;
-    });
 
-    reviews.forEach(r => {
-      if (!assignmentsMap[r.reviewerId]) assignmentsMap[r.reviewerId] = [];
-      assignmentsMap[r.reviewerId].push(r.submissionId);
-      if (r.status === 'completed') {
-        completedCountMap[r.reviewerId] = (completedCountMap[r.reviewerId] || 0) + 1;
-      }
+      const reviewsWrittenByThisSub = reviews.filter(r => r.reviewerId === s.studentId);
+      completedCountMap[s.studentId] = Math.max(s.givenCompletedCount || 0, reviewsWrittenByThisSub.filter(r => r.status === 'completed').length);
+      assignedToMeCountMap[s.studentId] = Math.max(s.givenReviewsCount || 0, reviewsWrittenByThisSub.length);
+
+      reviewsWrittenByThisSub.forEach(r => assignmentsMap[s.studentId].push(r.submissionId));
     });
 
     submittedWorks.forEach(s => {
@@ -112,14 +124,13 @@ export const runDistribution = async (assignmentId) => {
 
     for (const studentSub of students) {
       const studentId = studentSub.studentId;
-      let assignedToMe = (assignmentsMap[studentId] || []).length;
       const completedByMe = completedCountMap[studentId] || 0;
 
       // In rolling mode, we only assign 1 review more than what's completed, up to N.
       // In full mode, we assign everything up to N.
       const targetLimit = isFullDistribution ? N : Math.min(completedByMe + 1, N);
 
-      while (assignedToMe < targetLimit && assignedToMe < N) {
+      while (assignedToMeCountMap[studentId] < targetLimit && assignedToMeCountMap[studentId] < N) {
         const candidates = submittedWorks
           .filter(s => s.studentId !== studentId && !assignmentsMap[studentId].includes(s.id))
           .filter(s => (receivedCountMap[s.id] || 0) < N) // Strict limit check
@@ -134,11 +145,11 @@ export const runDistribution = async (assignmentId) => {
         let successfullyAssigned = false;
         // Try candidates one by one until one succeeds (transactionally)
         for (const candidate of candidates) {
-          const success = await tryAssignReview(studentId, studentSub.studentName, candidate, assignmentId, studentSub.classId, N);
+          const success = await tryAssignReview(studentId, studentSub.studentName, candidate, assignmentId, studentSub.classId, N, targetLimit);
           if (success) {
             assignmentsMap[studentId].push(candidate.id);
             receivedCountMap[candidate.id] = (receivedCountMap[candidate.id] || 0) + 1;
-            assignedToMe++;
+            assignedToMeCountMap[studentId]++;
             successfullyAssigned = true;
             break;
           }
