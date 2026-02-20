@@ -4,6 +4,7 @@ import { db } from '../../lib/firebase';
 import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { Plus, Trash2, ArrowLeft, Save, GripVertical } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
+import { RichTextInput } from '../../components/RichTextEditor';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext,
@@ -327,6 +328,14 @@ export default function AssignmentBuilder() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Basic validation for rich text
+    const plainDescription = description.replace(/<[^>]*>/g, '').trim();
+    if (!plainDescription) {
+      alert(t('assignment.error_saving')); // Or a more specific message if available
+      return;
+    }
+
     const data = {
       title,
       description,
@@ -391,12 +400,11 @@ export default function AssignmentBuilder() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('assignment.instructions')}</label>
-            <textarea
-              required
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 h-32"
+            <RichTextInput
+              content={description}
+              onChange={setDescription}
               placeholder={t('assignment.what_to_do')}
+              editorClassName="min-h-[200px] p-4"
             />
           </div>
           <div>

@@ -6,7 +6,7 @@ import { doc, updateDoc, setDoc, serverTimestamp, increment } from 'firebase/fir
 import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, RefreshCw, Users, BookOpen, ArrowLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
-import { useRichTextEditor, EditorToolbar, RichTextRenderer } from '../../components/RichTextEditor';
+import { useRichTextEditor, EditorToolbar, RichTextRenderer, RichTextInput } from '../../components/RichTextEditor';
 import { runDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
@@ -159,11 +159,12 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     if (e) e.preventDefault();
 
     const currentText = textRef.current;
+    const plainText = currentText.replace(/<[^>]*>/g, '').trim();
 
     // Allow empty submission for auto-submit if time runs out, but check trim for manual
-    if (!e && !currentText.trim()) {
+    if (!e && !plainText) {
        // auto-submitting empty text is allowed
-    } else if (e && !currentText.trim()) {
+    } else if (e && !plainText) {
        return;
     }
 
@@ -336,9 +337,8 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     });
   };
 
-  const handleTextChange = async (e) => {
-    const newText = e.target.value;
-    setText(newText);
+  const handleTextChange = async (newHtml) => {
+    setText(newHtml);
 
     if (assignment.timeLimit && !mySubmission?.writingStartedAt) {
       const subId = `${assignment.id}_${user.uid}`;
@@ -369,7 +369,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           </div>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">{assignment.title}</h1>
-            <p className="text-gray-500 mb-1">{assignment.description}</p>
+            <div className="text-gray-500 mb-1">
+              <RichTextRenderer content={assignment.description} />
+            </div>
             <Breadcrumbs />
           </div>
         </div>
@@ -385,12 +387,11 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                 </div>
               )}
             </div>
-            <textarea
-              value={text}
+            <RichTextInput
+              content={text}
               onChange={handleTextChange}
-              className="w-full h-64 p-4 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
               placeholder={t('assignment.type_response')}
-              required={timeLeft === null} // Not required if auto-submitting
+              editorClassName="min-h-[300px] p-4"
             />
             <button
               type="submit"
@@ -577,7 +578,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-xl border">
                <h3 className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-2">{t('assignment.instructions')}</h3>
-               <p className="text-gray-600 text-sm italic">{assignment.description}</p>
+               <div className="text-gray-600 text-sm italic">
+                  <RichTextRenderer content={assignment.description} />
+               </div>
             </div>
 
             <div className="bg-white p-6 rounded-xl border">
@@ -585,11 +588,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                 {isReceived ? t('assignment.your_submission') : t('assignment.peer_submission')}
               </h3>
               <div className="prose max-w-none text-gray-800">
-                {viewingReview.highlightedSubmission ? (
-                  <RichTextRenderer content={viewingReview.highlightedSubmission} />
-                ) : (
-                  <div className="whitespace-pre-wrap">{targetSubmission?.content?.text}</div>
-                )}
+                <RichTextRenderer content={viewingReview.highlightedSubmission || targetSubmission?.content?.text || ''} />
               </div>
             </div>
           </div>
@@ -642,7 +641,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           </div>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">{assignment.title}</h1>
-            <p className="text-gray-500 mb-1">{assignment.description}</p>
+            <div className="text-gray-500 mb-1">
+              <RichTextRenderer content={assignment.description} />
+            </div>
             <Breadcrumbs />
           </div>
         </div>
