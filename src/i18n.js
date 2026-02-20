@@ -205,6 +205,8 @@ const resources = {
         agreement_status: 'Stav souhlasu',
         strongly_disagree: 'Rozhodně nesouhlasím',
         strongly_agree: 'Rozhodně souhlasím',
+        test_response: 'Testovací odpověď',
+        back_to_monitoring: 'Zpět k monitoringu',
       },
       editor: {
         bold: 'Tučně',
@@ -428,6 +430,8 @@ const resources = {
         agreement_status: 'Agreement Status',
         strongly_disagree: 'Strongly disagree',
         strongly_agree: 'Strongly agree',
+        test_response: 'Test Response',
+        back_to_monitoring: 'Back to Monitoring',
       },
       editor: {
         bold: 'Bold',
