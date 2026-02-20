@@ -10,7 +10,7 @@ import { useRichTextEditor, EditorToolbar, RichTextRenderer } from '../../compon
 import { runDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
-export default function StudentAssignmentView({ assignment, submissions, reviews }) {
+export default function StudentAssignmentView({ assignment, submissions, reviews, isTestMode, setMockSubmissions, setMockReviews }) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const [text, setText] = useState('');
@@ -61,7 +61,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       setActiveColor(null);
       setIsEraserActive(false);
     }
-  }, [activeReview?.id]);
+  }, [activeReview, submissions]);
 
   const mySubmission = (submissions || []).find(s => s.studentId === user.uid);
   const isSubmitted = mySubmission && mySubmission.status !== 'expected';
@@ -103,6 +103,25 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       // Only create placeholder for students if it doesn't exist yet
       if (user && assignment && !mySubmission && assignment.allowSubmissions !== false) {
         const subId = `${assignment.id}_${user.uid}`;
+        if (isTestMode) {
+          setMockSubmissions(prev => {
+            if (prev.find(s => s.id === subId)) return prev;
+            return [...prev, {
+              id: subId,
+              assignmentId: assignment.id,
+              classId: assignment.classId,
+              studentId: user.uid,
+              studentName: user.displayName || 'Student',
+              status: 'expected',
+              reviewCount: 0,
+              assignedCount: 0,
+              givenReviewsCount: 0,
+              givenCompletedCount: 0,
+              createdAt: { toMillis: () => Date.now() }
+            }];
+          });
+          return;
+        }
         try {
           await setDoc(doc(db, 'submissions', subId), {
             assignmentId: assignment.id,
@@ -122,7 +141,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       }
     };
     createPlaceholder();
-  }, [user, assignment, !!mySubmission, !!submissions]);
+  }, [user, assignment, mySubmission, submissions, isTestMode, setMockSubmissions]);
 
   const submittedCount = (submissions || []).filter(s => s.status !== 'expected').length;
   const canReview = submittedCount >= assignment.review_start_threshold;
@@ -151,6 +170,71 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     setSubmitting(true);
     try {
       const subId = `${assignment.id}_${user.uid}`;
+
+      if (isTestMode) {
+        // 1. Update own submission
+        setMockSubmissions(prev => prev.map(s => s.id === subId ? {
+          ...s,
+          content: { text: currentText },
+          status: 'submitted',
+          updatedAt: { toMillis: () => Date.now() }
+        } : s));
+
+        // 2. Create mock peer submission
+        const peerSubId = `peer_${assignment.id}`;
+        const peerSub = {
+          id: peerSubId,
+          assignmentId: assignment.id,
+          classId: assignment.classId,
+          studentId: 'peer_uid',
+          studentName: 'Spolužák (Test)',
+          content: { text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
+          status: 'submitted',
+          reviewCount: 1,
+          assignedCount: 1,
+          createdAt: { toMillis: () => Date.now() - 10000 }
+        };
+
+        setMockSubmissions(prev => {
+           if (prev.find(s => s.id === peerSubId)) return prev;
+           return [...prev, peerSub];
+        });
+
+        // 3. Create review assigned to teacher
+        const reviewToMe = {
+          id: `review_to_${user.uid}`,
+          assignmentId: assignment.id,
+          submissionId: peerSubId,
+          reviewerId: user.uid,
+          reviewerName: user.displayName,
+          authorId: 'peer_uid',
+          status: 'assigned',
+          ratings: {},
+          feedback: '',
+          createdAt: { toMillis: () => Date.now() }
+        };
+
+        // 4. Create completed review FOR teacher's work
+        const reviewForMe = {
+          id: `review_for_${user.uid}`,
+          assignmentId: assignment.id,
+          submissionId: subId,
+          reviewerId: 'peer_uid',
+          reviewerName: 'Spolužák (Test)',
+          authorId: user.uid,
+          status: 'completed',
+          ratings: Object.fromEntries(assignment.rubric.map(r => [r.id, r.type === 'stars' ? 4 : (r.type === 'passfail' ? true : 1)])),
+          feedback: '<p>Skvělá práce! Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>',
+          highlightedSubmission: `<p>${currentText}</p>`,
+          completedAt: { toMillis: () => Date.now() },
+          createdAt: { toMillis: () => Date.now() - 5000 }
+        };
+
+        setMockReviews([reviewToMe, reviewForMe]);
+        setSubmitting(false);
+        return;
+      }
+
       await setDoc(doc(db, 'submissions', subId), {
         assignmentId: assignment.id,
         classId: assignment.classId,
@@ -185,6 +269,29 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     }
 
     try {
+      if (isTestMode) {
+        setMockReviews(prev => prev.map(r => r.id === activeReview.id ? {
+          ...r,
+          status: 'completed',
+          ratings: reviewForm.ratings,
+          feedback: reviewForm.feedback,
+          highlightedSubmission: highlightedSubmission,
+          completedAt: { toMillis: () => Date.now() }
+        } : r));
+
+        setMockSubmissions(prev => prev.map(s => s.id === activeReview.submissionId ? {
+          ...s,
+          reviewCount: (s.reviewCount || 0) + 1
+        } : s.id === `${assignment.id}_${user.uid}` ? {
+          ...s,
+          givenCompletedCount: (s.givenCompletedCount || 0) + 1
+        } : s));
+
+        setActiveReview(null);
+        setReviewForm({ ratings: {}, feedback: '' });
+        return;
+      }
+
       await updateDoc(doc(db, 'reviews', activeReview.id), {
         status: 'completed',
         ratings: reviewForm.ratings,
@@ -217,6 +324,13 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   };
 
   const handleMetaReview = async (reviewId, rating, note) => {
+    if (isTestMode) {
+      setMockReviews(prev => prev.map(r => r.id === reviewId ? {
+        ...r,
+        agreement: { rating, note, updatedAt: { toMillis: () => Date.now() } }
+      } : r));
+      return;
+    }
     await updateDoc(doc(db, 'reviews', reviewId), {
       agreement: { rating, note, updatedAt: serverTimestamp() }
     });
@@ -228,6 +342,13 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
     if (assignment.timeLimit && !mySubmission?.writingStartedAt) {
       const subId = `${assignment.id}_${user.uid}`;
+      if (isTestMode) {
+        setMockSubmissions(prev => prev.map(s => s.id === subId ? {
+          ...s,
+          writingStartedAt: { toMillis: () => Date.now() }
+        } : s));
+        return;
+      }
       try {
         await updateDoc(doc(db, 'submissions', subId), {
           writingStartedAt: serverTimestamp()
@@ -546,7 +667,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               {t('assignment.peer_reviews')}
             </h2>
             <button
-              onClick={() => runDistribution(assignment.id)}
+              onClick={() => !isTestMode && runDistribution(assignment.id)}
               className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
               title={t('assignment.check_new_tasks')}
             >

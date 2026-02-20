@@ -24,6 +24,29 @@ export default function AssignmentDetails() {
   const [expandedSubmissions, setExpandedSubmissions] = useState(new Set());
   const [sortConfig, setSortConfig] = useState({ field: 'completedAt', direction: 'desc' });
   const [now, setNow] = useState(() => Date.now());
+  const [testMode, setTestMode] = useState(false);
+  const [mockSubmissions, setMockSubmissions] = useState([]);
+  const [mockReviews, setMockReviews] = useState([]);
+
+  const enterTestMode = () => {
+    setMockSubmissions([
+      {
+        id: `${assignmentId}_${userData?.uid}`,
+        assignmentId: assignmentId,
+        classId: assignment?.classId,
+        studentId: userData?.uid,
+        studentName: `${userData?.displayName || 'Teacher'} (Test)`,
+        status: 'expected',
+        reviewCount: 0,
+        assignedCount: 0,
+        givenReviewsCount: 0,
+        givenCompletedCount: 0,
+        createdAt: { toMillis: () => Date.now() }
+      }
+    ]);
+    setMockReviews([]);
+    setTestMode(true);
+  };
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -275,6 +298,34 @@ export default function AssignmentDetails() {
     return <StudentAssignmentView assignment={assignment} submissions={submissions} reviews={reviews} />;
   }
 
+  if (testMode) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-gray-800 text-white p-4 flex justify-between items-center rounded-xl shadow-lg mb-6">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+            <span className="font-bold tracking-wide uppercase text-xs">{t('assignment.test_response')}</span>
+          </div>
+          <button
+            onClick={() => setTestMode(false)}
+            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors text-sm font-bold"
+          >
+            <RotateCcw className="w-4 h-4" />
+            {t('assignment.back_to_monitoring')}
+          </button>
+        </div>
+        <StudentAssignmentView
+          assignment={assignment}
+          submissions={mockSubmissions}
+          reviews={mockReviews}
+          isTestMode={true}
+          setMockSubmissions={setMockSubmissions}
+          setMockReviews={setMockReviews}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 pb-10">
       <div className="flex justify-between items-start">
@@ -289,6 +340,15 @@ export default function AssignmentDetails() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
+          <button
+            onClick={enterTestMode}
+            className="flex items-center gap-2 border border-gray-300 bg-gray-50 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+            title={t('assignment.test_response')}
+          >
+            <Send className="w-4 h-4" />
+            <span>{t('assignment.test_response')}</span>
+          </button>
+
           <button
             onClick={() => runDistribution(assignmentId)}
             className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
