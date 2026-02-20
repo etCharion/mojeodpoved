@@ -3,9 +3,10 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
 import Underline from '@tiptap/extension-underline';
-import { Bold, Italic, Underline as UnderlineIcon, Eraser, MinusCircle } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, Eraser, MinusCircle, List, ListOrdered } from 'lucide-react';
 import { HIGHLIGHTER_COLORS } from '../lib/constants';
 import { useTranslation } from 'react-i18next';
+import Placeholder from '@tiptap/extension-placeholder';
 
 export const useRichTextEditor = ({
   content,
@@ -15,7 +16,9 @@ export const useRichTextEditor = ({
   highlightOnly = false,
   className = "",
   activeColor,
-  isEraserActive
+  isEraserActive,
+  onFocus,
+  onBlur
 }) => {
   // Use refs to keep handlers up to date without re-creating the editor
   const activeColorRef = useRef(activeColor);
@@ -26,9 +29,14 @@ export const useRichTextEditor = ({
       StarterKit,
       Underline,
       Highlight.configure({ multicolor: true }),
+      Placeholder.configure({
+        placeholder: placeholder || '',
+      }),
     ],
     content: content,
     editable: !readOnly,
+    onFocus: () => onFocus?.(),
+    onBlur: () => onBlur?.(),
     onUpdate: ({ editor }) => {
       if (onChange) {
         const html = editor.getHTML();
@@ -150,7 +158,8 @@ export const EditorToolbar = ({
   setActiveColor,
   isEraserActive,
   setIsEraserActive,
-  showFormatting = true
+  showFormatting = true,
+  showHighlighter = true
 }) => {
   const { t } = useTranslation();
 
@@ -212,44 +221,77 @@ export const EditorToolbar = ({
           >
             <UnderlineIcon className="w-4 h-4" />
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              const focused = editors.find(e => e?.isFocused) || editors[0];
+              focused?.chain().focus().toggleBulletList().run();
+            }}
+            className={`p-1.5 rounded hover:bg-gray-100 ${editors.some(e => e?.isActive('bulletList')) ? 'bg-gray-100 text-indigo-600' : 'text-gray-600'}`}
+            title={t('editor.bullet_list')}
+          >
+            <List className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const focused = editors.find(e => e?.isFocused) || editors[0];
+              focused?.chain().focus().toggleOrderedList().run();
+            }}
+            className={`p-1.5 rounded hover:bg-gray-100 ${editors.some(e => e?.isActive('orderedList')) ? 'bg-gray-100 text-indigo-600' : 'text-gray-600'}`}
+            title={t('editor.ordered_list')}
+          >
+            <ListOrdered className="w-4 h-4" />
+          </button>
         </div>
       )}
 
-      <div className="flex items-center gap-1 pr-1 border-r border-gray-300">
-        {HIGHLIGHTER_COLORS.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => selectColor(c.color)}
-            className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${activeColor === c.color ? 'border-gray-600 scale-110' : 'border-transparent'}`}
-            style={{ backgroundColor: c.color }}
-            title={c.label}
-          />
-        ))}
-      </div>
+      {showHighlighter && (
+        <>
+          <div className="flex items-center gap-1 pr-1 border-r border-gray-300">
+            {HIGHLIGHTER_COLORS.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => selectColor(c.color)}
+                className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${activeColor === c.color ? 'border-gray-600 scale-110' : 'border-transparent'}`}
+                style={{ backgroundColor: c.color }}
+                title={c.label}
+              />
+            ))}
+          </div>
 
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={toggleEraser}
-          className={`p-1.5 rounded hover:bg-gray-100 ${isEraserActive ? 'bg-gray-100 text-red-600' : 'text-gray-600'}`}
-          title={t('editor.eraser')}
-        >
-          <Eraser className="w-4 h-4" />
-        </button>
-      </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={toggleEraser}
+              className={`p-1.5 rounded hover:bg-gray-100 ${isEraserActive ? 'bg-gray-100 text-red-600' : 'text-gray-600'}`}
+              title={t('editor.eraser')}
+            >
+              <Eraser className="w-4 h-4" />
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 };
 
 export const RichTextRenderer = ({ content, className = "" }) => {
+  // If content is plain text (doesn't look like HTML), wrap newlines in <p> or use whitespace-pre-wrap
+  const processedContent = React.useMemo(() => {
+    if (!content) return '';
+    if (content.trim().startsWith('<')) return content;
+    return content.split('\n').map(line => `<p>${line}</p>`).join('');
+  }, [content]);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
       Underline,
       Highlight.configure({ multicolor: true }),
     ],
-    content: content || '',
+    content: processedContent,
     editable: false,
     editorProps: {
       attributes: {
@@ -259,10 +301,41 @@ export const RichTextRenderer = ({ content, className = "" }) => {
   });
 
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content || '');
+    if (editor && processedContent !== editor.getHTML()) {
+      editor.commands.setContent(processedContent);
     }
-  }, [content, editor]);
+  }, [processedContent, editor]);
 
   return <EditorContent editor={editor} />;
+};
+
+export const RichTextInput = ({
+  content,
+  onChange,
+  placeholder,
+  className = "",
+  editorClassName = "min-h-[150px] p-4",
+  onFocus,
+  onBlur
+}) => {
+  const editor = useRichTextEditor({
+    content,
+    onChange,
+    placeholder,
+    className: editorClassName,
+    onFocus,
+    onBlur
+  });
+
+  return (
+    <div className={`border rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 transition-all ${className}`}>
+      <div className="bg-gray-50 border-b p-1">
+        <EditorToolbar
+          editors={[editor]}
+          showHighlighter={false}
+        />
+      </div>
+      <EditorContent editor={editor} />
+    </div>
+  );
 };

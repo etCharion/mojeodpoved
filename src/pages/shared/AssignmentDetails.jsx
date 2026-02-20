@@ -499,7 +499,7 @@ export default function AssignmentDetails() {
                           </div>
                         ) : (
                           <div className="max-w-xs truncate text-sm text-gray-600 italic">
-                            "{sub.content?.text?.substring(0, 50)}..."
+                            "{sub.content?.text?.replace(/<[^>]*>/g, '').substring(0, 50)}..."
                           </div>
                         )}
                       </td>
@@ -569,8 +569,8 @@ export default function AssignmentDetails() {
                           <div className="bg-white p-6 rounded-xl border shadow-sm space-y-6">
                             <div>
                               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">{t('assignment.content')}</h4>
-                              <div className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
-                                {sub.content?.text}
+                              <div className="text-gray-700 text-sm leading-relaxed">
+                                <RichTextRenderer content={sub.content?.text || ''} />
                               </div>
                             </div>
 
@@ -736,11 +736,7 @@ export default function AssignmentDetails() {
                     <div className="mt-4 p-4 bg-white rounded-xl border border-indigo-100 shadow-sm">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">{t('assignment.original_text')}</p>
                       <div className="text-sm text-gray-600 italic leading-relaxed">
-                        {review.highlightedSubmission ? (
-                          <RichTextRenderer content={review.highlightedSubmission} />
-                        ) : (
-                          <div className="whitespace-pre-wrap">{authorSubmission?.content?.text || <span className="text-gray-400">{t('common.none')}</span>}</div>
-                        )}
+                        <RichTextRenderer content={review.highlightedSubmission || authorSubmission?.content?.text || ''} />
                       </div>
                     </div>
 
