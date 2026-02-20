@@ -70,13 +70,23 @@ export default function AssignmentDetails() {
 
       // Decrement counters on the target submission
       const subRef = doc(db, 'submissions', review.submissionId);
-      const updates = {
+      const targetUpdates = {
         assignedCount: increment(-1)
       };
       if (review.status === 'completed') {
-        updates.reviewCount = increment(-1);
+        targetUpdates.reviewCount = increment(-1);
       }
-      await updateDoc(subRef, updates);
+      await updateDoc(subRef, targetUpdates);
+
+      // Decrement counters on the reviewer submission
+      const reviewerSubRef = doc(db, 'submissions', `${assignmentId}_${review.reviewerId}`);
+      const reviewerUpdates = {
+        givenReviewsCount: increment(-1)
+      };
+      if (review.status === 'completed') {
+        reviewerUpdates.givenCompletedCount = increment(-1);
+      }
+      await updateDoc(reviewerSubRef, reviewerUpdates);
     } catch (err) {
       console.error("Error deleting review:", err);
     }
@@ -120,7 +130,14 @@ export default function AssignmentDetails() {
       const snap2 = await getDocs(q2);
 
       const deletePromises = [
-        ...snap1.docs.map(d => deleteDoc(d.ref)),
+        ...snap1.docs.map(d => {
+          const reviewData = d.data();
+          // For reviews targeting this submission, decrement counters on THEIR authors
+          const authorSubRef = doc(db, 'submissions', `${assignmentId}_${reviewData.reviewerId}`);
+          const updates = { givenReviewsCount: increment(-1) };
+          if (reviewData.status === 'completed') updates.givenCompletedCount = increment(-1);
+          return [deleteDoc(d.ref), updateDoc(authorSubRef, updates)];
+        }).flat(),
         ...snap2.docs.map(d => {
           const reviewData = d.data();
           // For reviews this student wrote, decrement counters on THEIR targets
@@ -151,7 +168,13 @@ export default function AssignmentDetails() {
       const snap2 = await getDocs(q2);
 
       const deletePromises = [
-        ...snap1.docs.map(d => deleteDoc(d.ref)),
+        ...snap1.docs.map(d => {
+          const reviewData = d.data();
+          const authorSubRef = doc(db, 'submissions', `${assignmentId}_${reviewData.reviewerId}`);
+          const updates = { givenReviewsCount: increment(-1) };
+          if (reviewData.status === 'completed') updates.givenCompletedCount = increment(-1);
+          return [deleteDoc(d.ref), updateDoc(authorSubRef, updates)];
+        }).flat(),
         ...snap2.docs.map(d => {
           const reviewData = d.data();
           const targetSubRef = doc(db, 'submissions', reviewData.submissionId);
@@ -169,6 +192,8 @@ export default function AssignmentDetails() {
         writingStartedAt: null,
         reviewCount: 0,
         assignedCount: 0,
+        givenReviewsCount: 0,
+        givenCompletedCount: 0,
         updatedAt: serverTimestamp()
       });
     } catch (err) {

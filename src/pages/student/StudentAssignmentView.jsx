@@ -112,6 +112,8 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
             status: 'expected',
             reviewCount: 0,
             assignedCount: 0,
+            givenReviewsCount: 0,
+            givenCompletedCount: 0,
             createdAt: serverTimestamp()
           }, { merge: true });
         } catch (err) {
@@ -191,10 +193,16 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
         completedAt: serverTimestamp()
       });
 
-      // Update the submission's reviewCount atomically
+      // Update the target submission's reviewCount atomically
       const subRef = doc(db, 'submissions', activeReview.submissionId);
       await updateDoc(subRef, {
         reviewCount: increment(1)
+      });
+
+      // Update the reviewer's givenCompletedCount atomically
+      const reviewerSubRef = doc(db, 'submissions', `${assignment.id}_${user.uid}`);
+      await updateDoc(reviewerSubRef, {
+        givenCompletedCount: increment(1)
       });
 
       // Trigger next review assignment

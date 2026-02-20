@@ -40,6 +40,8 @@
 - `content`: { text: string }
 - `reviewCount`: number (how many reviews it has COMPLETED/RECEIVED)
 - `assignedCount`: number (how many reviewers it has been ASSIGNED to, including pending ones)
+- `givenReviewsCount`: number (how many reviews this student has been ASSIGNED to write)
+- `givenCompletedCount`: number (how many reviews this student has COMPLETED writing)
 - `createdAt`: timestamp
 
 ### `reviews`
