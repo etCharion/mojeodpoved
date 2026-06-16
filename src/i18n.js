@@ -238,6 +238,8 @@ const resources = {
         owners: 'Příjemci hodnocení',
         no_owners: 'Nikdo (anonymní)',
         reviews_assigned_label: 'Přiřazeno recenzí',
+        permission_error_title: 'Nepodařilo se načíst data úlohy',
+        permission_error_desc: 'Firestore zamítl přístup (chybějící oprávnění). Nejčastější příčina je, že nejsou nasazena aktuální bezpečnostní pravidla (firestore.rules). Po jejich nasazení obnovte stránku.',
       },
       editor: {
         bold: 'Tučně',
@@ -496,6 +498,8 @@ const resources = {
         owners: 'Evaluation recipients',
         no_owners: 'Nobody (anonymous)',
         reviews_assigned_label: 'Reviews assigned',
+        permission_error_title: 'Could not load assignment data',
+        permission_error_desc: 'Firestore denied access (missing permissions). The most common cause is that the current security rules (firestore.rules) are not deployed. Deploy them and refresh the page.',
       },
       editor: {
         bold: 'Bold',
