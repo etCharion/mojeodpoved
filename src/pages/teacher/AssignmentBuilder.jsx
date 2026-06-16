@@ -190,6 +190,7 @@ export default function AssignmentBuilder() {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState((assignmentId || copyFrom) ? true : false);
+  const [mode, setMode] = useState('peer');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [mandatoryFeedback, setMandatoryFeedback] = useState(true);
@@ -220,6 +221,7 @@ export default function AssignmentBuilder() {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
+          setMode(data.mode === 'teacher' ? 'teacher' : 'peer');
           setTitle(data.title);
           setDescription(data.description);
           setMandatoryFeedback(data.mandatory_feedback);
@@ -337,6 +339,7 @@ export default function AssignmentBuilder() {
     }
 
     const data = {
+      mode,
       title,
       description,
       mandatory_feedback: mandatoryFeedback,
@@ -384,6 +387,34 @@ export default function AssignmentBuilder() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Submission Mode */}
+        <section className="bg-white p-6 rounded-xl border space-y-4">
+          <h2 className="text-xl font-semibold mb-4">{t('assignment.submission_mode')}</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setMode('peer')}
+              className={`text-left p-4 rounded-xl border-2 transition-all ${mode === 'peer' ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200 hover:border-indigo-300'}`}
+            >
+              <h3 className="font-bold text-gray-900">{t('assignment.mode_peer')}</h3>
+              <p className="text-sm text-gray-500 mt-1">{t('assignment.mode_peer_desc')}</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('teacher')}
+              className={`text-left p-4 rounded-xl border-2 transition-all ${mode === 'teacher' ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200 hover:border-indigo-300'}`}
+            >
+              <h3 className="font-bold text-gray-900">{t('assignment.mode_teacher')}</h3>
+              <p className="text-sm text-gray-500 mt-1">{t('assignment.mode_teacher_desc')}</p>
+            </button>
+          </div>
+          {mode === 'teacher' && (
+            <p className="text-sm text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg p-3">
+              {t('assignment.teacher_texts_desc')}
+            </p>
+          )}
+        </section>
+
         {/* Basic Info */}
         <section className="bg-white p-6 rounded-xl border space-y-4">
           <h2 className="text-xl font-semibold mb-4">{t('assignment.basic_info')}</h2>
@@ -407,18 +438,20 @@ export default function AssignmentBuilder() {
               editorClassName="min-h-[200px] p-4"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('assignment.time_limit')}</label>
-            <input
-              type="number"
-              min="1"
-              value={timeLimit}
-              onChange={(e) => setTimeLimit(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="e.g. 45"
-            />
-            <p className="text-xs text-gray-500 mt-1">{t('assignment.time_limit_desc')}</p>
-          </div>
+          {mode === 'peer' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('assignment.time_limit')}</label>
+              <input
+                type="number"
+                min="1"
+                value={timeLimit}
+                onChange={(e) => setTimeLimit(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="e.g. 45"
+              />
+              <p className="text-xs text-gray-500 mt-1">{t('assignment.time_limit_desc')}</p>
+            </div>
+          )}
         </section>
 
         {/* Control Toggles */}
@@ -441,21 +474,23 @@ export default function AssignmentBuilder() {
               </label>
             </div>
 
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div>
-                <h3 className="font-medium text-sm">{t('assignment.allow_submissions')}</h3>
-                <p className="text-xs text-gray-500">{t('assignment.allow_submissions_desc')}</p>
+            {mode === 'peer' && (
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <h3 className="font-medium text-sm">{t('assignment.allow_submissions')}</h3>
+                  <p className="text-xs text-gray-500">{t('assignment.allow_submissions_desc')}</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allowSubmissions}
+                    onChange={(e) => setAllowSubmissions(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={allowSubmissions}
-                  onChange={(e) => setAllowSubmissions(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
-            </div>
+            )}
 
             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
               <div>
@@ -489,28 +524,32 @@ export default function AssignmentBuilder() {
                 className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('assignment.min_submissions')}</label>
-              <input
-                type="number"
-                min="1"
-                value={reviewStartThreshold}
-                onChange={(e) => setReviewStartThreshold(e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('assignment.expected_count')}</label>
-              <input
-                type="number"
-                min="0"
-                value={expectedSubmissions}
-                onChange={(e) => setExpectedSubmissions(e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Auto"
-              />
-              <p className="text-xs text-gray-500 mt-1">{t('assignment.expected_count_desc')}</p>
-            </div>
+            {mode === 'peer' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('assignment.min_submissions')}</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={reviewStartThreshold}
+                    onChange={(e) => setReviewStartThreshold(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('assignment.expected_count')}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={expectedSubmissions}
+                    onChange={(e) => setExpectedSubmissions(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Auto"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">{t('assignment.expected_count_desc')}</p>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="space-y-4 pt-4 border-t">

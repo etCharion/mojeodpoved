@@ -2,14 +2,132 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot, collection, query, where, updateDoc, deleteDoc, getDocs, serverTimestamp, increment } from 'firebase/firestore';
-import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send, ChevronDown, ChevronUp, ArrowUpDown, Clock, RotateCcw } from 'lucide-react';
+import { doc, onSnapshot, collection, query, where, updateDoc, deleteDoc, getDocs, addDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send, ChevronDown, ChevronUp, ArrowUpDown, Clock, RotateCcw, Plus, X, FileText, Mail } from 'lucide-react';
 import StudentAssignmentView from '../student/StudentAssignmentView';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
-import { RichTextRenderer } from '../../components/RichTextEditor';
-import { runDistribution } from '../../lib/logic';
+import { RichTextRenderer, RichTextInput } from '../../components/RichTextEditor';
+import { runDistribution, runTeacherDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
+
+function TextEditorModal({ initial, classStudentEmails, onClose, onSave, t }) {
+  const [label, setLabel] = useState(initial?.label || initial?.studentName || '');
+  const [content, setContent] = useState(initial?.content?.text || '');
+  const [ownerEmails, setOwnerEmails] = useState(new Set((initial?.ownerEmails || []).map(e => e.toLowerCase())));
+  const [manualEmails, setManualEmails] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const toggleEmail = (email) => {
+    setOwnerEmails(prev => {
+      const next = new Set(prev);
+      if (next.has(email)) next.delete(email);
+      else next.add(email);
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
+    const plain = content.replace(/<[^>]*>/g, '').trim();
+    if (!plain) return;
+
+    const manual = manualEmails
+      .split(/[,\s\n\t;]+/)
+      .map(e => e.trim().toLowerCase())
+      .filter(e => e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+
+    const finalOwners = Array.from(new Set([...ownerEmails, ...manual]));
+
+    setSaving(true);
+    await onSave({
+      label: label.trim() || t('assignment.teacher_texts'),
+      content: { text: content },
+      ownerEmails: finalOwners
+    });
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-2xl p-6 max-w-2xl w-full shadow-xl my-8">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">
+            {initial ? t('assignment.edit_text') : t('assignment.add_text')}
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            <X className="w-6 h-6 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-1">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('assignment.text_label')}</label>
+            <input
+              type="text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder={t('assignment.text_label_placeholder')}
+              className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('assignment.text_content')}</label>
+            <RichTextInput
+              content={content}
+              onChange={setContent}
+              placeholder={t('assignment.text_content')}
+              editorClassName="min-h-[180px] p-4"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('assignment.owner_emails')}</label>
+            <p className="text-xs text-gray-500 mb-2">{t('assignment.owner_emails_desc')}</p>
+            {classStudentEmails.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {classStudentEmails.map(email => {
+                  const active = ownerEmails.has(email);
+                  return (
+                    <button
+                      type="button"
+                      key={email}
+                      onClick={() => toggleEmail(email)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${active ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'}`}
+                    >
+                      {email}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <textarea
+              value={manualEmails}
+              onChange={(e) => setManualEmails(e.target.value)}
+              placeholder={t('assignment.owner_emails_placeholder')}
+              rows="2"
+              className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-5 mt-2 border-t">
+          <button onClick={onClose} className="px-6 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium">
+            {t('common.cancel')}
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !content.replace(/<[^>]*>/g, '').trim()}
+            className="px-8 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold disabled:bg-gray-300"
+          >
+            {t('assignment.save_text')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AssignmentDetails() {
   const { t } = useTranslation();
@@ -27,8 +145,62 @@ export default function AssignmentDetails() {
   const [testMode, setTestMode] = useState(false);
   const [mockSubmissions, setMockSubmissions] = useState([]);
   const [mockReviews, setMockReviews] = useState([]);
+  const [classStudentEmails, setClassStudentEmails] = useState([]);
+  const [textModal, setTextModal] = useState({ open: false, text: null });
+
+  const isTeacherMode = assignment?.mode === 'teacher';
 
   const enterTestMode = () => {
+    if (assignment?.mode === 'teacher') {
+      const reviewerId = userData?.uid;
+      const textId = `text_test_${assignmentId}`;
+      setMockSubmissions([
+        {
+          id: `${assignmentId}_${reviewerId}`,
+          assignmentId,
+          classId: assignment?.classId,
+          studentId: reviewerId,
+          studentName: `${userData?.displayName || 'Teacher'} (Test)`,
+          email: (userData?.email || '').toLowerCase(),
+          status: 'reviewer',
+          isReviewer: true,
+          givenReviewsCount: 1,
+          givenCompletedCount: 0,
+          createdAt: { toMillis: () => Date.now() }
+        },
+        {
+          id: textId,
+          assignmentId,
+          classId: assignment?.classId,
+          isTeacherText: true,
+          studentName: 'Text 1 (Test)',
+          label: 'Text 1 (Test)',
+          content: { text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.' },
+          ownerEmails: [],
+          status: 'submitted',
+          reviewCount: 0,
+          assignedCount: 1,
+          createdAt: { toMillis: () => Date.now() - 10000 }
+        }
+      ]);
+      setMockReviews([
+        {
+          id: `rev_test_${assignmentId}`,
+          assignmentId,
+          submissionId: textId,
+          reviewerId,
+          reviewerName: userData?.displayName || 'Teacher',
+          authorId: null,
+          isTeacherText: true,
+          status: 'assigned',
+          ratings: {},
+          feedback: '',
+          createdAt: { toMillis: () => Date.now() }
+        }
+      ]);
+      setTestMode(true);
+      return;
+    }
     setMockSubmissions([
       {
         id: `${assignmentId}_${userData?.uid}`,
@@ -82,6 +254,70 @@ export default function AssignmentDetails() {
       unsubReviews();
     };
   }, [assignmentId]);
+
+  useEffect(() => {
+    if (!assignment?.classId) return;
+    const unsub = onSnapshot(doc(db, 'classes', assignment.classId), (snap) => {
+      if (snap.exists()) {
+        setClassStudentEmails((snap.data().studentEmails || []).map(e => e.toLowerCase()));
+      }
+    });
+    return () => unsub();
+  }, [assignment?.classId]);
+
+  const handleSaveText = async (data) => {
+    try {
+      if (textModal.text) {
+        await updateDoc(doc(db, 'submissions', textModal.text.id), {
+          label: data.label,
+          studentName: data.label,
+          content: data.content,
+          ownerEmails: data.ownerEmails,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        await addDoc(collection(db, 'submissions'), {
+          assignmentId,
+          classId: assignment.classId,
+          isTeacherText: true,
+          label: data.label,
+          studentName: data.label,
+          content: data.content,
+          ownerEmails: data.ownerEmails,
+          status: 'submitted',
+          reviewCount: 0,
+          assignedCount: 0,
+          createdAt: serverTimestamp()
+        });
+      }
+      await runTeacherDistribution(assignmentId);
+    } catch (err) {
+      console.error("Error saving text:", err);
+      alert(t('assignment.error_saving'));
+    }
+  };
+
+  const handleDeleteText = async (text) => {
+    if (!window.confirm(t('assignment.delete_text_confirm'))) return;
+    try {
+      const q = query(collection(db, 'reviews'), where('submissionId', '==', text.id));
+      const snap = await getDocs(q);
+      const deletePromises = [
+        ...snap.docs.map(d => {
+          const reviewData = d.data();
+          const reviewerRef = doc(db, 'submissions', `${assignmentId}_${reviewData.reviewerId}`);
+          const updates = { givenReviewsCount: increment(-1) };
+          if (reviewData.status === 'completed') updates.givenCompletedCount = increment(-1);
+          return [deleteDoc(d.ref), updateDoc(reviewerRef, updates)];
+        }).flat(),
+        deleteDoc(doc(db, 'submissions', text.id))
+      ];
+      await Promise.all(deletePromises);
+    } catch (err) {
+      console.error("Error deleting text:", err);
+      alert("Error deleting text");
+    }
+  };
 
   const handleDeleteReview = async (reviewId) => {
     if (!window.confirm(t('assignment.delete_review_confirm'))) return;
@@ -350,7 +586,7 @@ export default function AssignmentDetails() {
           </button>
 
           <button
-            onClick={() => runDistribution(assignmentId)}
+            onClick={() => isTeacherMode ? runTeacherDistribution(assignmentId) : runDistribution(assignmentId)}
             className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
             title={t('assignment.redistribute')}
           >
@@ -382,6 +618,7 @@ export default function AssignmentDetails() {
               <span>{t('assignment.visibility')}</span>
           </button>
 
+          {!isTeacherMode && (
           <button
               onClick={() => toggleField('allowSubmissions', assignment.allowSubmissions === false)}
               className={`flex items-center gap-2 border px-4 py-2 rounded-lg transition-colors text-sm font-medium ${assignment.allowSubmissions !== false ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'}`}
@@ -389,6 +626,7 @@ export default function AssignmentDetails() {
               {assignment.allowSubmissions !== false ? <Send className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
               <span>{t('assignment.allow_submissions')}</span>
           </button>
+          )}
 
           <button
               onClick={() => toggleField('allowReviews', assignment.allowReviews === false)}
@@ -401,14 +639,24 @@ export default function AssignmentDetails() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl border">
-          <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t('assignment.submissions')}</p>
-          <p className="text-4xl font-bold mt-2">
-            {submissions.filter(s => s.status !== 'expected').length}
-            <span className="text-xl text-gray-400 font-normal"> / {assignment.expected_submissions || submissions.length}</span>
-          </p>
-          <p className="text-sm text-gray-400 mt-1">{t('assignment.goal', { count: assignment.review_start_threshold })}</p>
-        </div>
+        {isTeacherMode ? (
+          <div className="bg-white p-6 rounded-xl border">
+            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t('assignment.texts_count')}</p>
+            <p className="text-4xl font-bold mt-2">
+              {submissions.filter(s => s.isTeacherText).length}
+            </p>
+            <p className="text-sm text-gray-400 mt-1">{t('assignment.reviewers')}: {submissions.filter(s => s.status === 'reviewer').length}</p>
+          </div>
+        ) : (
+          <div className="bg-white p-6 rounded-xl border">
+            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t('assignment.submissions')}</p>
+            <p className="text-4xl font-bold mt-2">
+              {submissions.filter(s => s.status !== 'expected').length}
+              <span className="text-xl text-gray-400 font-normal"> / {assignment.expected_submissions || submissions.length}</span>
+            </p>
+            <p className="text-sm text-gray-400 mt-1">{t('assignment.goal', { count: assignment.review_start_threshold })}</p>
+          </div>
+        )}
         <div className="bg-white p-6 rounded-xl border">
           <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t('assignment.reviews_completed')}</p>
           <p className="text-4xl font-bold mt-2">{reviews.filter(r => r.status === 'completed').length}</p>
@@ -425,7 +673,124 @@ export default function AssignmentDetails() {
         </div>
       )}
 
+      {/* Teacher-provided texts management */}
+      {isTeacherMode && (
+        <section className="bg-white border rounded-xl overflow-hidden">
+          <div className="p-6 border-b bg-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                {t('assignment.teacher_texts')}
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">{t('assignment.teacher_texts_desc')}</p>
+            </div>
+            <button
+              onClick={() => setTextModal({ open: true, text: null })}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shrink-0"
+            >
+              <Plus className="w-5 h-5" />
+              <span>{t('assignment.add_text')}</span>
+            </button>
+          </div>
+          <div className="divide-y">
+            {submissions.filter(s => s.isTeacherText)
+              .sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0))
+              .map((text) => {
+                const textReviews = reviews.filter(r => r.submissionId === text.id);
+                const completedReviews = textReviews.filter(r => r.status === 'completed');
+                return (
+                  <div key={text.id} className="p-6 group hover:bg-gray-50 transition-colors">
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-gray-900">{text.label || text.studentName}</h3>
+                        <div className="text-sm text-gray-500 italic mt-1 line-clamp-2">
+                          "{text.content?.text?.replace(/<[^>]*>/g, '').substring(0, 140)}..."
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 mt-3">
+                          <span className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded">
+                            <Star className="w-3 h-3" />
+                            {completedReviews.length} / {assignment.reviews_per_submission} {t('assignment.reviews_completed').toLowerCase()}
+                          </span>
+                          <span className="flex items-center gap-1 text-xs text-gray-500">
+                            <Mail className="w-3 h-3" />
+                            {(text.ownerEmails && text.ownerEmails.length > 0)
+                              ? text.ownerEmails.join(', ')
+                              : t('assignment.no_owners')}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => setTextModal({ open: true, text })}
+                          className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title={t('assignment.edit_text')}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteText(text)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title={t('common.delete')}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            {submissions.filter(s => s.isTeacherText).length === 0 && (
+              <div className="p-12 text-center text-gray-400 italic">{t('assignment.no_texts')}</div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Reviewer progress (teacher-provided texts mode) */}
+      {isTeacherMode && submissions.filter(s => s.status === 'reviewer').length > 0 && (
+        <section className="bg-white border rounded-xl overflow-hidden">
+          <div className="p-6 border-b bg-gray-50">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              {t('assignment.reviewer_progress')}
+            </h2>
+          </div>
+          <div className="divide-y">
+            {submissions.filter(s => s.status === 'reviewer')
+              .sort((a, b) => (a.studentName || '').localeCompare(b.studentName || ''))
+              .map((rv) => {
+                const written = reviews.filter(r => r.reviewerId === rv.studentId);
+                const done = written.filter(r => r.status === 'completed').length;
+                return (
+                  <div key={rv.id} className="px-6 py-4 flex justify-between items-center">
+                    <div className="min-w-0">
+                      <div className="font-medium text-gray-900 truncate">{rv.studentName}</div>
+                      <div className="text-xs text-gray-400 truncate">{rv.email}</div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-500">
+                        {done} / {written.length} {t('assignment.reviews_completed').toLowerCase()}
+                      </span>
+                      <div className="flex gap-1">
+                        {written.map((r, i) => (
+                          <button
+                            key={i}
+                            onClick={() => r.status === 'completed' && jumpToReview(r.id)}
+                            title={r.status === 'completed' ? t('assignment.view_detail') : t('common.pending')}
+                            className={`w-3 h-3 rounded-full ${r.status === 'completed' ? 'bg-green-500 cursor-pointer hover:ring-2 ring-green-200' : 'bg-gray-300 cursor-default'}`}
+                          ></button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </section>
+      )}
+
       {/* Submissions Table */}
+      {!isTeacherMode && (
       <section className="bg-white border rounded-xl overflow-hidden">
         <div className="p-6 border-b bg-gray-50">
           <h2 className="text-xl font-bold flex items-center gap-2">
@@ -638,6 +1003,7 @@ export default function AssignmentDetails() {
           </table>
         </div>
       </section>
+      )}
 
       {/* Reviews Detail */}
       <section className="bg-white border rounded-xl overflow-hidden">
@@ -779,6 +1145,16 @@ export default function AssignmentDetails() {
           )}
         </div>
       </section>
+
+      {textModal.open && (
+        <TextEditorModal
+          initial={textModal.text}
+          classStudentEmails={classStudentEmails}
+          onClose={() => setTextModal({ open: false, text: null })}
+          onSave={handleSaveText}
+          t={t}
+        />
+      )}
     </div>
   );
 }

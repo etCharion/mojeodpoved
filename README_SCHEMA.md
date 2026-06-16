@@ -27,21 +27,46 @@
 - `rubric`: { id, type: 'stars'|'choice', question, options?: string[] }[]
 - `mandatory_feedback`: boolean
 - `min_char_count`: number
-- `reviews_per_submission`: number (N)
-- `review_start_threshold`: number (M)
+- `reviews_per_submission`: number (N — in `teacher` mode this is reviews per text)
+- `review_start_threshold`: number (M — peer mode only)
+- `mode`: 'peer' | 'teacher' (default 'peer'). In `teacher` mode the teacher provides the texts to review (see below); students act only as reviewers.
 - `status`: 'open' | 'closed'
 - `createdAt`: timestamp
 
 ### `submissions`
-- `id`: string (doc id)
+A submission doc is one of three shapes depending on the assignment mode:
+
+**Peer-mode student work** (and the placeholder for it):
+- `id`: string (`${assignmentId}_${studentId}`)
 - `assignmentId`: string
 - `studentId`: string
 - `studentName`: string
 - `content`: { text: string }
+- `status`: 'expected' | 'submitted'
 - `reviewCount`: number (how many reviews it has COMPLETED/RECEIVED)
 - `assignedCount`: number (how many reviewers it has been ASSIGNED to, including pending ones)
 - `givenReviewsCount`: number (how many reviews this student has been ASSIGNED to write)
 - `givenCompletedCount`: number (how many reviews this student has COMPLETED writing)
+- `createdAt`: timestamp
+
+**Teacher-provided text** (`mode: 'teacher'`):
+- `id`: string (auto-generated)
+- `assignmentId`, `classId`: string
+- `isTeacherText`: true
+- `label`: string (display name of the text, also mirrored into `studentName` for reuse)
+- `content`: { text: string }
+- `ownerEmails`: string[] (lowercased student emails who see the resulting evaluation as if they submitted the text)
+- `status`: 'submitted'
+- `reviewCount`, `assignedCount`: number
+- `createdAt`: timestamp
+
+**Reviewer profile** (`mode: 'teacher'`, one per student who opened the assignment):
+- `id`: string (`${assignmentId}_${studentId}`)
+- `assignmentId`, `classId`: string
+- `studentId`, `studentName`, `email`: string
+- `status`: 'reviewer'
+- `isReviewer`: true
+- `givenReviewsCount`, `givenCompletedCount`: number
 - `createdAt`: timestamp
 
 ### `reviews`
@@ -49,7 +74,8 @@
 - `assignmentId`: string
 - `submissionId`: string
 - `reviewerId`: string
-- `authorId`: string
+- `authorId`: string (null for teacher-provided texts; recipients are matched via the text's `ownerEmails`)
+- `isTeacherText`: boolean (true when reviewing a teacher-provided text)
 - `reviewerName`: string (visible to teacher only?)
 - `status`: 'assigned' | 'completed'
 - `ratings`: { [criteriaId]: number }

@@ -7,12 +7,14 @@ import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, RefreshCw, 
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
 import { useRichTextEditor, EditorToolbar, RichTextRenderer, RichTextInput } from '../../components/RichTextEditor';
-import { runDistribution } from '../../lib/logic';
+import { runDistribution, runTeacherDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
 export default function StudentAssignmentView({ assignment, submissions, reviews, isTestMode, setMockSubmissions, setMockReviews }) {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const isTeacherMode = assignment.mode === 'teacher';
+  const myEmail = (user.email || '').toLowerCase();
   const [text, setText] = useState('');
   const textRef = useRef('');
   useEffect(() => {
@@ -64,9 +66,16 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   }, [activeReview, submissions]);
 
   const mySubmission = (submissions || []).find(s => s.studentId === user.uid);
-  const isSubmitted = mySubmission && mySubmission.status !== 'expected';
+  // Texts the current student "owns" (teacher selected their email as a recipient of the evaluation)
+  const myOwnedTextIds = isTeacherMode
+    ? (submissions || []).filter(s => s.isTeacherText && (s.ownerEmails || []).includes(myEmail)).map(s => s.id)
+    : [];
+  // In teacher mode the student is a reviewer only, so the "submit work" step is skipped entirely.
+  const isSubmitted = isTeacherMode ? true : (mySubmission && mySubmission.status !== 'expected');
   const myReviewsGiven = (reviews || []).filter(r => r.reviewerId === user.uid);
-  const myReviewsReceived = (reviews || []).filter(r => r.authorId === user.uid && r.status === 'completed');
+  const myReviewsReceived = isTeacherMode
+    ? (reviews || []).filter(r => myOwnedTextIds.includes(r.submissionId) && r.status === 'completed')
+    : (reviews || []).filter(r => r.authorId === user.uid && r.status === 'completed');
 
   useEffect(() => {
     if (!assignment.timeLimit || !mySubmission || isSubmitted) {
@@ -99,6 +108,32 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   useEffect(() => {
     const createPlaceholder = async () => {
       if (!submissions) return;
+
+      // Teacher-provided-texts mode: register the student as a reviewer and pull review tasks.
+      if (isTeacherMode) {
+        if (user && assignment && !mySubmission) {
+          const subId = `${assignment.id}_${user.uid}`;
+          if (isTestMode) return;
+          try {
+            await setDoc(doc(db, 'submissions', subId), {
+              assignmentId: assignment.id,
+              classId: assignment.classId,
+              studentId: user.uid,
+              studentName: user.displayName || 'Student',
+              email: (user.email || '').toLowerCase(),
+              status: 'reviewer',
+              isReviewer: true,
+              givenReviewsCount: 0,
+              givenCompletedCount: 0,
+              createdAt: serverTimestamp()
+            }, { merge: true });
+            await runTeacherDistribution(assignment.id);
+          } catch (err) {
+            console.error("Reviewer registration error:", err);
+          }
+        }
+        return;
+      }
 
       // Only create placeholder for students if it doesn't exist yet
       if (user && assignment && !mySubmission && assignment.allowSubmissions !== false) {
@@ -141,10 +176,10 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       }
     };
     createPlaceholder();
-  }, [user, assignment, mySubmission, submissions, isTestMode, setMockSubmissions]);
+  }, [user, assignment, mySubmission, submissions, isTestMode, isTeacherMode, setMockSubmissions]);
 
-  const submittedCount = (submissions || []).filter(s => s.status !== 'expected').length;
-  const canReview = submittedCount >= assignment.review_start_threshold;
+  const submittedCount = (submissions || []).filter(s => s.status !== 'expected' && s.status !== 'reviewer').length;
+  const canReview = isTeacherMode ? true : submittedCount >= assignment.review_start_threshold;
   const reviewsNeeded = assignment.reviews_per_submission;
   const reviewsCompleted = myReviewsGiven.filter(r => r.status === 'completed').length;
 
@@ -314,7 +349,11 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       });
 
       // Trigger next review assignment
-      await runDistribution(assignment.id);
+      if (isTeacherMode) {
+        await runTeacherDistribution(assignment.id);
+      } else {
+        await runDistribution(assignment.id);
+      }
 
       setActiveReview(null);
       setReviewForm({ ratings: {}, feedback: '' });
@@ -421,7 +460,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       }}>
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold">{t('assignment.reviewing_peer')}</h1>
+            <h1 className="text-2xl font-bold">{isTeacherMode ? t('assignment.review_text') : t('assignment.reviewing_peer')}</h1>
             <Breadcrumbs />
           </div>
           <button onClick={() => setActiveReview(null)} className="text-gray-500 hover:underline">{t('common.cancel')}</button>
@@ -431,7 +470,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           {/* Peer Work */}
           <div className="bg-white rounded-xl border h-fit lg:sticky lg:top-8 overflow-hidden">
             <div className="p-4 border-b bg-gray-50">
-              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">{t('assignment.peer_submission')}</h3>
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">{isTeacherMode ? t('assignment.reviewed_text') : t('assignment.peer_submission')}</h3>
             </div>
             <div className="p-2">
                <EditorContent editor={submissionEditor} />
@@ -550,12 +589,17 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   }
 
   if (viewingReview) {
-    // A review is "received" if the current user is the author of the work being reviewed
-    const isReceived = viewingReview.authorId === user.uid;
+    // A review is "received" if the current user is the author/owner of the work being reviewed
+    const isReceived = isTeacherMode
+      ? myOwnedTextIds.includes(viewingReview.submissionId)
+      : viewingReview.authorId === user.uid;
 
     const targetSubmissionId = viewingReview.submissionId;
-    // For received reviews, show my own submission. For given reviews, show the peer's submission.
-    const targetSubmission = isReceived ? mySubmission : (submissions || []).find(s => s.id === targetSubmissionId);
+    // In teacher mode the reviewed item is always the teacher-provided text.
+    // In peer mode: for received reviews show my own submission, otherwise the peer's.
+    const targetSubmission = isTeacherMode
+      ? (submissions || []).find(s => s.id === targetSubmissionId)
+      : (isReceived ? mySubmission : (submissions || []).find(s => s.id === targetSubmissionId));
 
     return (
       <div className="space-y-8 pb-20">
@@ -585,7 +629,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
             <div className="bg-white p-6 rounded-xl border">
               <h3 className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-4">
-                {isReceived ? t('assignment.your_submission') : t('assignment.peer_submission')}
+                {isTeacherMode ? t('assignment.reviewed_text') : (isReceived ? t('assignment.your_submission') : t('assignment.peer_submission'))}
               </h3>
               <div className="prose max-w-none text-gray-800">
                 <RichTextRenderer content={viewingReview.highlightedSubmission || targetSubmission?.content?.text || ''} />
@@ -648,13 +692,17 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <span className="flex items-center gap-1.5 bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-full text-sm font-semibold">
-            <CheckCircle className="w-4 h-4" />
-            {t('assignment.work_submitted')}
-          </span>
+          {!isTeacherMode && (
+            <span className="flex items-center gap-1.5 bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-full text-sm font-semibold">
+              <CheckCircle className="w-4 h-4" />
+              {t('assignment.work_submitted')}
+            </span>
+          )}
           <span className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-full text-sm font-semibold">
             <Users className="w-4 h-4" />
-            {t('assignment.reviews_done', { completed: reviewsCompleted, needed: reviewsNeeded })}
+            {isTeacherMode
+              ? `${reviewsCompleted} ${t('assignment.reviews_completed').toLowerCase()}`
+              : t('assignment.reviews_done', { completed: reviewsCompleted, needed: reviewsNeeded })}
           </span>
         </div>
       </div>
@@ -665,10 +713,10 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-bold flex items-center gap-2">
               <MessageSquare className="w-5 h-5 text-indigo-600" />
-              {t('assignment.peer_reviews')}
+              {isTeacherMode ? t('assignment.texts_to_review') : t('assignment.peer_reviews')}
             </h2>
             <button
-              onClick={() => !isTestMode && runDistribution(assignment.id)}
+              onClick={() => !isTestMode && (isTeacherMode ? runTeacherDistribution(assignment.id) : runDistribution(assignment.id))}
               className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
               title={t('assignment.check_new_tasks')}
             >
@@ -711,26 +759,35 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
                         disabled={assignment.allowReviews === false}
                         className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                       >
-                        {assignment.allowReviews === false ? t('common.status').replace('Status', 'Closed') : t('assignment.start_review')}
+                        {assignment.allowReviews === false ? t('common.closed') : (isTeacherMode ? t('assignment.review_text') : t('assignment.start_review'))}
                       </button>
                     )}
                   </div>
                 </div>
               ))}
-              {myReviewsGiven.length < reviewsNeeded && (
-                <div className="bg-gray-50 border-2 border-dashed p-4 rounded-xl text-center text-gray-500 text-sm">
-              {assignment.allowReviews === false ? t('assignment.reviews_closed') : t('assignment.wait_more_peers')}
-                </div>
+              {isTeacherMode ? (
+                !myReviewsGiven.some(r => r.status !== 'completed') && (
+                  <div className="bg-gray-50 border-2 border-dashed p-4 rounded-xl text-center text-gray-500 text-sm">
+                    {assignment.allowReviews === false ? t('assignment.reviews_closed') : t('assignment.no_more_texts')}
+                  </div>
+                )
+              ) : (
+                myReviewsGiven.length < reviewsNeeded && (
+                  <div className="bg-gray-50 border-2 border-dashed p-4 rounded-xl text-center text-gray-500 text-sm">
+                    {assignment.allowReviews === false ? t('assignment.reviews_closed') : t('assignment.wait_more_peers')}
+                  </div>
+                )
               )}
             </div>
           )}
         </div>
 
         {/* Feedback Section */}
+        {(!isTeacherMode || myOwnedTextIds.length > 0) && (
         <div className="space-y-6">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Star className="w-5 h-5 text-yellow-500" />
-            {t('assignment.feedback_received')}
+            {isTeacherMode ? t('assignment.your_text_feedback') : t('assignment.feedback_received')}
           </h2>
           <div className="space-y-4">
             {myReviewsReceived.map((rev, i) => (
@@ -815,6 +872,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );
