@@ -19,6 +19,21 @@ service cloud.firestore {
       return isAuthenticated() && getUserData().role == 'student';
     }
 
+    function classData(classId) {
+      return get(/databases/$(database)/documents/classes/$(classId)).data;
+    }
+
+    function isClassTeacher(classId) {
+      return isAuthenticated() && classData(classId).teacherId == request.auth.uid;
+    }
+
+    function isClassMember(classId) {
+      return isAuthenticated() && (
+        request.auth.uid in classData(classId).studentUids ||
+        request.auth.token.email.lower() in classData(classId).studentEmails
+      );
+    }
+
     // User profiles
     match /users/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isTeacher());
@@ -60,37 +75,45 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid;
     }
 
-    // Submissions
+    // Submissions (includes teacher-provided texts and student reviewer profiles)
     match /submissions/{submissionId} {
       allow read: if isAuthenticated() && (
-        get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid ||
-        resource.data.studentId == request.auth.uid
+        isClassTeacher(resource.data.classId) ||
+        resource.data.studentId == request.auth.uid ||
+        isClassMember(resource.data.classId)
       );
       allow create: if isAuthenticated() && (
-        (request.auth.uid in get(/databases/$(database)/documents/classes/$(request.resource.data.classId)).data.studentUids ||
-         request.auth.token.email.lower() in get(/databases/$(database)/documents/classes/$(request.resource.data.classId)).data.studentEmails) &&
-        get(/databases/$(database)/documents/assignments/$(request.resource.data.assignmentId)).data.allowSubmissions != false
+        // Teacher creates anything (texts) within their class
+        isClassTeacher(request.resource.data.classId) ||
+        // Enrolled students create their own doc (work submission or reviewer profile)
+        (request.resource.data.studentId == request.auth.uid && isClassMember(request.resource.data.classId))
       );
       allow update: if isAuthenticated() && (
-        get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid ||
-        resource.data.studentId == request.auth.uid
+        isClassTeacher(resource.data.classId) ||
+        resource.data.studentId == request.auth.uid ||
+        // Student reviewers update a teacher text's counters when picking up a review
+        (resource.data.isTeacherText == true && isClassMember(resource.data.classId))
       );
+      allow delete: if isClassTeacher(resource.data.classId);
     }
 
     // Reviews
     match /reviews/{reviewId} {
       allow read: if isAuthenticated() && (
-        get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid ||
+        isClassTeacher(resource.data.classId) ||
         resource.data.reviewerId == request.auth.uid ||
-        (resource.data.authorId == request.auth.uid && resource.data.status == 'completed')
+        (resource.data.authorId == request.auth.uid && resource.data.status == 'completed') ||
+        isClassMember(resource.data.classId)
       );
       allow create: if isAuthenticated(); // Broad for now, logic handled in app
       allow update: if isAuthenticated() && (
         resource.data.reviewerId == request.auth.uid ||
         resource.data.authorId == request.auth.uid || // For meta-reviews
-        get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid
+        isClassTeacher(resource.data.classId) ||
+        // Teacher-text owners can leave agreement/meta-review feedback
+        request.auth.token.email.lower() in get(/databases/$(database)/documents/submissions/$(resource.data.submissionId)).data.get('ownerEmails', [])
       );
-      allow delete: if isAuthenticated() && get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid;
+      allow delete: if isClassTeacher(resource.data.classId);
     }
   }
 }
