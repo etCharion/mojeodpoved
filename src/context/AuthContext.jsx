@@ -17,28 +17,34 @@ export const AuthProvider = ({ children }) => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       if (user) {
-        // Fetch or create user document
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          setUserData(userDoc.data());
-        } else {
-          // For demo purposes, if email contains 'teacher' or 'admin', or matches the primary admin email, make them a teacher.
-          const adminEmail = 'gunka.daniel@gmail.com';
-          const isTeacher =
-            user.email.toLowerCase() === adminEmail.toLowerCase() ||
-            user.email.toLowerCase().includes('teacher') ||
-            user.email.toLowerCase().includes('admin');
+        try {
+          // Fetch or create user document
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            setUserData(userDoc.data());
+          } else {
+            // For demo purposes, if email contains 'teacher' or 'admin', or matches the primary admin email, make them a teacher.
+            const adminEmail = 'gunka.daniel@gmail.com';
+            const isTeacher =
+              user.email.toLowerCase() === adminEmail.toLowerCase() ||
+              user.email.toLowerCase().includes('teacher') ||
+              user.email.toLowerCase().includes('admin');
 
-          const newData = {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL,
-            role: isTeacher ? 'teacher' : 'student',
-            createdAt: new Date().toISOString()
-          };
-          await setDoc(doc(db, 'users', user.uid), newData);
-          setUserData(newData);
+            const newData = {
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName,
+              photoURL: user.photoURL,
+              role: isTeacher ? 'teacher' : 'student',
+              createdAt: new Date().toISOString()
+            };
+            await setDoc(doc(db, 'users', user.uid), newData);
+            setUserData(newData);
+          }
+        } catch (err) {
+          // Never let a Firestore error leave the app stuck on a blank loading screen.
+          console.error('Failed to load user profile:', err);
+          setUserData(null);
         }
       } else {
         setUserData(null);
