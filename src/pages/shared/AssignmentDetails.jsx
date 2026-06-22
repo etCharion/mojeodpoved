@@ -147,6 +147,7 @@ export default function AssignmentDetails() {
   const [mockReviews, setMockReviews] = useState([]);
   const [classStudentEmails, setClassStudentEmails] = useState([]);
   const [textModal, setTextModal] = useState({ open: false, text: null });
+  const [loadError, setLoadError] = useState(false);
 
   const isTeacherMode = assignment?.mode === 'teacher';
 
@@ -230,6 +231,15 @@ export default function AssignmentDetails() {
     setLoading(true);
     setSubmissions(null);
     setReviews(null);
+    setLoadError(false);
+
+    const onListenerError = (err) => {
+      console.error('Assignment data listener error:', err);
+      setLoadError(true);
+      setLoading(false);
+      setSubmissions(prev => prev ?? []);
+      setReviews(prev => prev ?? []);
+    };
 
     const unsubAssignment = onSnapshot(doc(db, 'assignments', assignmentId), (doc) => {
       if (doc.exists()) {
@@ -238,15 +248,15 @@ export default function AssignmentDetails() {
         setAssignment(null);
       }
       setLoading(false);
-    });
+    }, onListenerError);
 
     const unsubSubmissions = onSnapshot(query(collection(db, 'submissions'), where('assignmentId', '==', assignmentId)), (snapshot) => {
       setSubmissions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    }, onListenerError);
 
     const unsubReviews = onSnapshot(query(collection(db, 'reviews'), where('assignmentId', '==', assignmentId)), (snapshot) => {
       setReviews(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    }, onListenerError);
 
     return () => {
       unsubAssignment();
@@ -261,7 +271,7 @@ export default function AssignmentDetails() {
       if (snap.exists()) {
         setClassStudentEmails((snap.data().studentEmails || []).map(e => e.toLowerCase()));
       }
-    });
+    }, (err) => console.error('Class listener error:', err));
     return () => unsub();
   }, [assignment?.classId]);
 
@@ -471,6 +481,17 @@ export default function AssignmentDetails() {
     }
   };
 
+  if (loadError && !assignment) {
+    return (
+      <div className="max-w-2xl mx-auto mt-10 bg-red-50 border border-red-200 text-red-700 rounded-xl p-6 flex items-start gap-3">
+        <AlertCircle className="w-6 h-6 shrink-0 mt-0.5" />
+        <div>
+          <p className="font-bold">{t('assignment.permission_error_title')}</p>
+          <p className="text-sm mt-1">{t('assignment.permission_error_desc')}</p>
+        </div>
+      </div>
+    );
+  }
   if (loading || submissions === null || reviews === null) return <div>{t('common.loading')}</div>;
   if (!assignment) return <div>{t('common.unknown').replace('Unknown', 'Assignment not found')}</div>;
 

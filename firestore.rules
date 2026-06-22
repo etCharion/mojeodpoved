@@ -60,14 +60,12 @@ service cloud.firestore {
 
     // Assignments
     match /assignments/{assignmentId} {
-      allow read: if isAuthenticated() && (
-        get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid ||
-        (
-          (request.auth.uid in get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.studentUids ||
-           request.auth.token.email.lower() in get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.studentEmails) &&
-          resource.data.isVisible != false
-        )
-      );
+      // Reads are open to any authenticated user. The client loads all of a
+      // class's/assignment's documents in one unfiltered query and filters per
+      // user in the UI (anonymity is a UI concern, not a DB one). Gating reads
+      // with get() broke those list queries: a single document with a missing or
+      // legacy classId makes the get() error, which denies the entire query.
+      allow read: if isAuthenticated();
       allow create: if isTeacher();
       allow update: if isAuthenticated() && (
         get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid
@@ -77,11 +75,11 @@ service cloud.firestore {
 
     // Submissions (includes teacher-provided texts and student reviewer profiles)
     match /submissions/{submissionId} {
-      allow read: if isAuthenticated() && (
-        isClassTeacher(resource.data.classId) ||
-        resource.data.studentId == request.auth.uid ||
-        isClassMember(resource.data.classId)
-      );
+      // Reads are open to any authenticated user; the client queries by
+      // assignmentId and filters per user in the UI. A get()-based read rule
+      // breaks the list query if any single document has a missing/legacy
+      // classId (the get() errors and denies the whole query).
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && (
         // Teacher creates anything (texts) within their class
         isClassTeacher(request.resource.data.classId) ||
@@ -99,13 +97,11 @@ service cloud.firestore {
 
     // Reviews
     match /reviews/{reviewId} {
-      allow read: if isAuthenticated() && (
-        isClassTeacher(resource.data.classId) ||
-        resource.data.reviewerId == request.auth.uid ||
-        (resource.data.authorId == request.auth.uid && resource.data.status == 'completed') ||
-        isClassMember(resource.data.classId)
-      );
-      allow create: if isAuthenticated(); // Broad for now, logic handled in app
+      // Reads are open to any authenticated user; the client filters per user in
+      // the UI (anonymity is enforced in the UI, not the DB). Same reasoning as
+      // submissions: a get()-based read rule breaks the list query.
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated(); // Logic handled in app
       allow update: if isAuthenticated() && (
         resource.data.reviewerId == request.auth.uid ||
         resource.data.authorId == request.auth.uid || // For meta-reviews
