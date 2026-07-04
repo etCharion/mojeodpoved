@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { EditorContent } from '@tiptap/react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, updateDoc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, serverTimestamp, increment, writeBatch } from 'firebase/firestore';
 import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, RefreshCw, Users, BookOpen, ArrowLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
@@ -367,25 +367,23 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
         return;
       }
 
-      await updateDoc(doc(db, 'reviews', activeReview.id), {
+      // One atomic batch: the review itself plus both counters, so a failure
+      // halfway through can no longer leave the counters out of sync
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'reviews', activeReview.id), {
         status: 'completed',
         ratings: reviewForm.ratings,
         feedback: reviewForm.feedback,
         highlightedSubmission: highlightedSubmission,
         completedAt: serverTimestamp()
       });
-
-      // Update the target submission's reviewCount atomically
-      const subRef = doc(db, 'submissions', activeReview.submissionId);
-      await updateDoc(subRef, {
+      batch.update(doc(db, 'submissions', activeReview.submissionId), {
         reviewCount: increment(1)
       });
-
-      // Update the reviewer's givenCompletedCount atomically
-      const reviewerSubRef = doc(db, 'submissions', `${assignment.id}_${user.uid}`);
-      await updateDoc(reviewerSubRef, {
+      batch.update(doc(db, 'submissions', `${assignment.id}_${user.uid}`), {
         givenCompletedCount: increment(1)
       });
+      await batch.commit();
 
       // Trigger next review assignment
       if (isTeacherMode) {

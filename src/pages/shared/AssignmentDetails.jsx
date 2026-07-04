@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot, collection, query, where, updateDoc, deleteDoc, getDocs, addDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, updateDoc, getDocs, addDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send, ChevronDown, ChevronUp, ArrowUpDown, Clock, RotateCcw, Plus, X, FileText, Mail } from 'lucide-react';
 import StudentAssignmentView from '../student/StudentAssignmentView';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
 import { RichTextRenderer, RichTextInput } from '../../components/RichTextEditor';
 import { runDistribution, runTeacherDistribution, hasContent } from '../../lib/logic';
+import { commitBatched } from '../../lib/batch';
 import { useTranslation } from 'react-i18next';
 
 function TextEditorModal({ initial, classStudentEmails, onClose, onSave, t }) {
@@ -307,22 +308,39 @@ export default function AssignmentDetails() {
     }
   };
 
+  // Aggregate counter decrements per document so each doc gets exactly one
+  // batched update even when several deleted reviews touch it.
+  const collectDeltas = () => {
+    const deltas = new Map();
+    const add = (docId, field) => {
+      const entry = deltas.get(docId) || {};
+      entry[field] = (entry[field] || 0) - 1;
+      deltas.set(docId, entry);
+    };
+    const toOps = () => Array.from(deltas.entries()).map(([docId, fields]) => ({
+      type: 'update',
+      ref: doc(db, 'submissions', docId),
+      data: Object.fromEntries(Object.entries(fields).map(([f, v]) => [f, increment(v)]))
+    }));
+    return { add, toOps };
+  };
+
   const handleDeleteText = async (text) => {
     if (!window.confirm(t('assignment.delete_text_confirm'))) return;
     try {
       const q = query(collection(db, 'reviews'), where('submissionId', '==', text.id));
       const snap = await getDocs(q);
-      const deletePromises = [
-        ...snap.docs.map(d => {
-          const reviewData = d.data();
-          const reviewerRef = doc(db, 'submissions', `${assignmentId}_${reviewData.reviewerId}`);
-          const updates = { givenReviewsCount: increment(-1) };
-          if (reviewData.status === 'completed') updates.givenCompletedCount = increment(-1);
-          return [deleteDoc(d.ref), updateDoc(reviewerRef, updates)];
-        }).flat(),
-        deleteDoc(doc(db, 'submissions', text.id))
-      ];
-      await Promise.all(deletePromises);
+      const { add, toOps } = collectDeltas();
+      snap.docs.forEach(d => {
+        const reviewData = d.data();
+        add(`${assignmentId}_${reviewData.reviewerId}`, 'givenReviewsCount');
+        if (reviewData.status === 'completed') add(`${assignmentId}_${reviewData.reviewerId}`, 'givenCompletedCount');
+      });
+      await commitBatched([
+        ...snap.docs.map(d => ({ type: 'delete', ref: d.ref })),
+        ...toOps(),
+        { type: 'delete', ref: doc(db, 'submissions', text.id) }
+      ]);
     } catch (err) {
       console.error("Error deleting text:", err);
       alert("Error deleting text");
@@ -335,27 +353,18 @@ export default function AssignmentDetails() {
     if (!review) return;
 
     try {
-      await deleteDoc(doc(db, 'reviews', reviewId));
-
-      // Decrement counters on the target submission
-      const subRef = doc(db, 'submissions', review.submissionId);
-      const targetUpdates = {
-        assignedCount: increment(-1)
-      };
+      // Review + both counter updates in one atomic batch
+      const targetUpdates = { assignedCount: increment(-1) };
+      const reviewerUpdates = { givenReviewsCount: increment(-1) };
       if (review.status === 'completed') {
         targetUpdates.reviewCount = increment(-1);
-      }
-      await updateDoc(subRef, targetUpdates);
-
-      // Decrement counters on the reviewer submission
-      const reviewerSubRef = doc(db, 'submissions', `${assignmentId}_${review.reviewerId}`);
-      const reviewerUpdates = {
-        givenReviewsCount: increment(-1)
-      };
-      if (review.status === 'completed') {
         reviewerUpdates.givenCompletedCount = increment(-1);
       }
-      await updateDoc(reviewerSubRef, reviewerUpdates);
+      await commitBatched([
+        { type: 'delete', ref: doc(db, 'reviews', reviewId) },
+        { type: 'update', ref: doc(db, 'submissions', review.submissionId), data: targetUpdates },
+        { type: 'update', ref: doc(db, 'submissions', `${assignmentId}_${review.reviewerId}`), data: reviewerUpdates }
+      ]);
     } catch (err) {
       console.error("Error deleting review:", err);
     }
@@ -365,21 +374,17 @@ export default function AssignmentDetails() {
     if (!window.confirm(t('assignment.delete_confirm'))) return;
     try {
       const classId = assignment.classId;
-      // 1. Delete reviews
       const qReviews = query(collection(db, 'reviews'), where('assignmentId', '==', assignmentId));
       const snapReviews = await getDocs(qReviews);
 
-      // 2. Delete submissions
       const qSubmissions = query(collection(db, 'submissions'), where('assignmentId', '==', assignmentId));
       const snapSubmissions = await getDocs(qSubmissions);
 
-      const deletePromises = [
-        ...snapReviews.docs.map(d => deleteDoc(d.ref)),
-        ...snapSubmissions.docs.map(d => deleteDoc(d.ref)),
-        deleteDoc(doc(db, 'assignments', assignmentId))
-      ];
-
-      await Promise.all(deletePromises);
+      await commitBatched([
+        ...snapReviews.docs.map(d => ({ type: 'delete', ref: d.ref })),
+        ...snapSubmissions.docs.map(d => ({ type: 'delete', ref: d.ref })),
+        { type: 'delete', ref: doc(db, 'assignments', assignmentId) }
+      ]);
       navigate(`/teacher/class/${classId}`);
     } catch (err) {
       console.error(err);
@@ -387,38 +392,45 @@ export default function AssignmentDetails() {
     }
   };
 
+  // Delete all reviews touching a submission (as target or written by its
+  // author) and return batch ops including the counter decrements on the
+  // other side of each review. Shared by delete and return-to-student.
+  const collectSubmissionReviewOps = async (sub) => {
+    // 1. Reviews where this submission is the target
+    const q1 = query(collection(db, 'reviews'), where('submissionId', '==', sub.id));
+    // 2. Reviews this student wrote
+    const q2 = query(collection(db, 'reviews'), where('reviewerId', '==', sub.studentId), where('assignmentId', '==', assignmentId));
+    const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+
+    const { add, toOps } = collectDeltas();
+    snap1.docs.forEach(d => {
+      const reviewData = d.data();
+      // decrement counters on the reviewers of this submission
+      add(`${assignmentId}_${reviewData.reviewerId}`, 'givenReviewsCount');
+      if (reviewData.status === 'completed') add(`${assignmentId}_${reviewData.reviewerId}`, 'givenCompletedCount');
+    });
+    snap2.docs.forEach(d => {
+      const reviewData = d.data();
+      // decrement counters on the targets this student reviewed
+      add(reviewData.submissionId, 'assignedCount');
+      if (reviewData.status === 'completed') add(reviewData.submissionId, 'reviewCount');
+    });
+
+    return [
+      ...snap1.docs.map(d => ({ type: 'delete', ref: d.ref })),
+      ...snap2.docs.map(d => ({ type: 'delete', ref: d.ref })),
+      ...toOps()
+    ];
+  };
+
   const handleDeleteSubmission = async (sub) => {
     if (!window.confirm(t('assignment.delete_submission_confirm'))) return;
     try {
-      // 1. Delete reviews where this submission is the target
-      const q1 = query(collection(db, 'reviews'), where('submissionId', '==', sub.id));
-      const snap1 = await getDocs(q1);
-
-      // 2. Delete reviews where this student is the reviewer
-      const q2 = query(collection(db, 'reviews'), where('reviewerId', '==', sub.studentId), where('assignmentId', '==', assignmentId));
-      const snap2 = await getDocs(q2);
-
-      const deletePromises = [
-        ...snap1.docs.map(d => {
-          const reviewData = d.data();
-          // For reviews targeting this submission, decrement counters on THEIR authors
-          const authorSubRef = doc(db, 'submissions', `${assignmentId}_${reviewData.reviewerId}`);
-          const updates = { givenReviewsCount: increment(-1) };
-          if (reviewData.status === 'completed') updates.givenCompletedCount = increment(-1);
-          return [deleteDoc(d.ref), updateDoc(authorSubRef, updates)];
-        }).flat(),
-        ...snap2.docs.map(d => {
-          const reviewData = d.data();
-          // For reviews this student wrote, decrement counters on THEIR targets
-          const targetSubRef = doc(db, 'submissions', reviewData.submissionId);
-          const updates = { assignedCount: increment(-1) };
-          if (reviewData.status === 'completed') updates.reviewCount = increment(-1);
-          return [deleteDoc(d.ref), updateDoc(targetSubRef, updates)];
-        }).flat(),
-        deleteDoc(doc(db, 'submissions', sub.id))
-      ];
-
-      await Promise.all(deletePromises);
+      const ops = await collectSubmissionReviewOps(sub);
+      await commitBatched([
+        ...ops,
+        { type: 'delete', ref: doc(db, 'submissions', sub.id) }
+      ]);
     } catch (err) {
       console.error(err);
       alert("Error deleting submission");
@@ -428,43 +440,25 @@ export default function AssignmentDetails() {
   const handleReturnSubmission = async (sub) => {
     if (!window.confirm(t('assignment.return_confirm'))) return;
     try {
-      // 1. Delete reviews where this submission is the target
-      const q1 = query(collection(db, 'reviews'), where('submissionId', '==', sub.id));
-      const snap1 = await getDocs(q1);
-
-      // 2. Delete reviews where this student is the reviewer
-      const q2 = query(collection(db, 'reviews'), where('reviewerId', '==', sub.studentId), where('assignmentId', '==', assignmentId));
-      const snap2 = await getDocs(q2);
-
-      const deletePromises = [
-        ...snap1.docs.map(d => {
-          const reviewData = d.data();
-          const authorSubRef = doc(db, 'submissions', `${assignmentId}_${reviewData.reviewerId}`);
-          const updates = { givenReviewsCount: increment(-1) };
-          if (reviewData.status === 'completed') updates.givenCompletedCount = increment(-1);
-          return [deleteDoc(d.ref), updateDoc(authorSubRef, updates)];
-        }).flat(),
-        ...snap2.docs.map(d => {
-          const reviewData = d.data();
-          const targetSubRef = doc(db, 'submissions', reviewData.submissionId);
-          const updates = { assignedCount: increment(-1) };
-          if (reviewData.status === 'completed') updates.reviewCount = increment(-1);
-          return [deleteDoc(d.ref), updateDoc(targetSubRef, updates)];
-        }).flat()
-      ];
-      await Promise.all(deletePromises);
-
-      // 3. Reset the submission
-      await updateDoc(doc(db, 'submissions', sub.id), {
-        status: 'expected',
-        content: null,
-        writingStartedAt: null,
-        reviewCount: 0,
-        assignedCount: 0,
-        givenReviewsCount: 0,
-        givenCompletedCount: 0,
-        updatedAt: serverTimestamp()
-      });
+      const ops = await collectSubmissionReviewOps(sub);
+      await commitBatched([
+        ...ops,
+        {
+          type: 'update',
+          ref: doc(db, 'submissions', sub.id),
+          data: {
+            status: 'expected',
+            content: null,
+            writingStartedAt: null,
+            submittedAt: null,
+            reviewCount: 0,
+            assignedCount: 0,
+            givenReviewsCount: 0,
+            givenCompletedCount: 0,
+            updatedAt: serverTimestamp()
+          }
+        }
+      ]);
     } catch (err) {
       console.error(err);
       alert("Error returning submission");

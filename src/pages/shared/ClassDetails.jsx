@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot, collection, query, where, updateDoc, arrayUnion, arrayRemove, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, updateDoc, arrayUnion, arrayRemove, getDocs, getDoc } from 'firebase/firestore';
+import { commitBatched } from '../../lib/batch';
 import { Users, BookOpen, Plus, Check, X, Clipboard, ExternalLink, Trash2, QrCode, Settings, Copy, ChevronRight, ArrowLeft, GripVertical } from 'lucide-react';
 import * as AllIcons from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -524,21 +525,17 @@ export default function ClassDetails() {
     if (!window.confirm(t('assignment.delete_confirm'))) return;
 
     try {
-      // Delete reviews
       const qReviews = query(collection(db, 'reviews'), where('assignmentId', '==', id));
       const snapReviews = await getDocs(qReviews);
 
-      // Delete submissions
       const qSubmissions = query(collection(db, 'submissions'), where('assignmentId', '==', id));
       const snapSubmissions = await getDocs(qSubmissions);
 
-      const deletePromises = [
-        ...snapReviews.docs.map(d => deleteDoc(d.ref)),
-        ...snapSubmissions.docs.map(d => deleteDoc(d.ref)),
-        deleteDoc(doc(db, 'assignments', id))
-      ];
-
-      await Promise.all(deletePromises);
+      await commitBatched([
+        ...snapReviews.docs.map(d => ({ type: 'delete', ref: d.ref })),
+        ...snapSubmissions.docs.map(d => ({ type: 'delete', ref: d.ref })),
+        { type: 'delete', ref: doc(db, 'assignments', id) }
+      ]);
     } catch (err) {
       console.error(err);
       alert("Error deleting assignment");
