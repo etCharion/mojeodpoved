@@ -2,15 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { EditorContent } from '@tiptap/react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, updateDoc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, serverTimestamp, increment, writeBatch } from 'firebase/firestore';
 import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, RefreshCw, Users, BookOpen, ArrowLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
 import { useRichTextEditor, EditorToolbar, RichTextRenderer, RichTextInput } from '../../components/RichTextEditor';
+import { stripHtml } from '../../lib/text';
 import { runDistribution, runTeacherDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
-export default function StudentAssignmentView({ assignment, submissions, reviews, isTestMode, setMockSubmissions, setMockReviews }) {
+export default function StudentAssignmentView({ assignment, submissions, reviews, submittedCount: submittedCountProp, isTestMode, setMockSubmissions, setMockReviews }) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const isTeacherMode = assignment.mode === 'teacher';
@@ -138,6 +139,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       // Only create placeholder for students if it doesn't exist yet
       if (user && assignment && !mySubmission && assignment.allowSubmissions !== false) {
         const subId = `${assignment.id}_${user.uid}`;
+        // With timerStart 'open' the countdown runs from the first page open,
+        // so the placeholder itself starts the clock.
+        const startTimerNow = !!assignment.timeLimit && assignment.timerStart === 'open';
         if (isTestMode) {
           setMockSubmissions(prev => {
             if (prev.find(s => s.id === subId)) return prev;
@@ -152,6 +156,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               assignedCount: 0,
               givenReviewsCount: 0,
               givenCompletedCount: 0,
+              ...(startTimerNow ? { writingStartedAt: { toMillis: () => Date.now() } } : {}),
               createdAt: { toMillis: () => Date.now() }
             }];
           });
@@ -168,6 +173,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
             assignedCount: 0,
             givenReviewsCount: 0,
             givenCompletedCount: 0,
+            ...(startTimerNow ? { writingStartedAt: serverTimestamp() } : {}),
             createdAt: serverTimestamp()
           }, { merge: true });
         } catch (err) {
@@ -178,10 +184,41 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     createPlaceholder();
   }, [user, assignment, mySubmission, submissions, isTestMode, isTeacherMode, setMockSubmissions]);
 
-  const submittedCount = (submissions || []).filter(s => s.status !== 'expected' && s.status !== 'reviewer').length;
+  // With narrow subscriptions the student no longer sees every submission,
+  // so the count comes from an aggregate query (prop); test mode and other
+  // full-data callers fall back to counting the array.
+  const submittedCount = submittedCountProp ?? (submissions || []).filter(s => s.status !== 'expected' && s.status !== 'reviewer').length;
   const canReview = isTeacherMode ? true : submittedCount >= assignment.review_start_threshold;
   const reviewsNeeded = assignment.reviews_per_submission;
   const reviewsCompleted = myReviewsGiven.filter(r => r.status === 'completed').length;
+
+  // Distribution normally runs when someone submits or completes a review.
+  // If that student closed the browser before it finished, tasks stay stuck
+  // until someone hits refresh. Run it once per page load, but only when this
+  // student is actually missing a task, so idle page opens stay cheap.
+  const distributionAttempted = useRef(false);
+  useEffect(() => {
+    if (isTestMode || distributionAttempted.current) return;
+    if (!submissions || !reviews) return;
+    if (assignment.allowReviews === false || !canReview || !isSubmitted) return;
+
+    let missingTask;
+    if (isTeacherMode) {
+      // The narrow data slice doesn't include all teacher texts, so we can't
+      // tell locally whether one is still available — run the (bounded,
+      // once-per-load) catch-up whenever there is no pending task.
+      missingTask = !myReviewsGiven.some(r => r.status !== 'completed');
+    } else {
+      const target = Math.min(reviewsCompleted + 1, reviewsNeeded);
+      missingTask = myReviewsGiven.length < target;
+    }
+
+    if (missingTask) {
+      distributionAttempted.current = true;
+      (isTeacherMode ? runTeacherDistribution(assignment.id) : runDistribution(assignment.id))
+        .catch(err => console.error('Distribution catch-up error:', err));
+    }
+  }, [submissions, reviews, isTestMode, isTeacherMode, canReview, isSubmitted, assignment, myReviewsGiven, reviewsCompleted, reviewsNeeded]);
 
   const formatTime = (ms) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -278,6 +315,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
         studentName: user.displayName,
         content: { text: currentText },
         status: 'submitted',
+        submittedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       }, { merge: true });
 
@@ -294,10 +332,8 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
 
-    // For validation, we might want to strip HTML tags to count real characters
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = reviewForm.feedback;
-    const plainFeedback = tempDiv.textContent || tempDiv.innerText || '';
+    // For validation, strip HTML tags to count real characters
+    const plainFeedback = stripHtml(reviewForm.feedback);
 
     if (assignment.mandatory_feedback && plainFeedback.length < assignment.min_char_count) {
       alert(t('assignment.char_required').replace('{{current}}', plainFeedback.length).replace('{{min}}', assignment.min_char_count));
@@ -328,25 +364,23 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
         return;
       }
 
-      await updateDoc(doc(db, 'reviews', activeReview.id), {
+      // One atomic batch: the review itself plus both counters, so a failure
+      // halfway through can no longer leave the counters out of sync
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'reviews', activeReview.id), {
         status: 'completed',
         ratings: reviewForm.ratings,
         feedback: reviewForm.feedback,
         highlightedSubmission: highlightedSubmission,
         completedAt: serverTimestamp()
       });
-
-      // Update the target submission's reviewCount atomically
-      const subRef = doc(db, 'submissions', activeReview.submissionId);
-      await updateDoc(subRef, {
+      batch.update(doc(db, 'submissions', activeReview.submissionId), {
         reviewCount: increment(1)
       });
-
-      // Update the reviewer's givenCompletedCount atomically
-      const reviewerSubRef = doc(db, 'submissions', `${assignment.id}_${user.uid}`);
-      await updateDoc(reviewerSubRef, {
+      batch.update(doc(db, 'submissions', `${assignment.id}_${user.uid}`), {
         givenCompletedCount: increment(1)
       });
+      await batch.commit();
 
       // Trigger next review assignment
       if (isTeacherMode) {
@@ -379,7 +413,8 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const handleTextChange = async (newHtml) => {
     setText(newHtml);
 
-    if (assignment.timeLimit && !mySubmission?.writingStartedAt) {
+    // In 'open' mode the clock already started with the placeholder
+    if (assignment.timeLimit && assignment.timerStart !== 'open' && !mySubmission?.writingStartedAt) {
       const subId = `${assignment.id}_${user.uid}`;
       if (isTestMode) {
         setMockSubmissions(prev => prev.map(s => s.id === subId ? {
@@ -453,6 +488,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
   // If in review mode
   if (activeReview) {
+    const feedbackLength = stripHtml(reviewForm.feedback).length;
     return (
       <div className="space-y-8 pb-20" style={{
         '--selection-color': isEraserActive ? '#cbd5e1' : (activeColor || '#bfdbfe'),
@@ -556,18 +592,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               </div>
               {assignment.mandatory_feedback && (
                 <div className="px-6 pb-6">
-                  <p className={`text-xs ${(() => {
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = reviewForm.feedback;
-                    const len = (tempDiv.textContent || tempDiv.innerText || '').length;
-                    return len < assignment.min_char_count ? 'text-red-500' : 'text-green-600';
-                  })()}`}>
+                  <p className={`text-xs ${feedbackLength < assignment.min_char_count ? 'text-red-500' : 'text-green-600'}`}>
                     {t('assignment.char_required', {
-                      current: (() => {
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = reviewForm.feedback;
-                        return (tempDiv.textContent || tempDiv.innerText || '').length;
-                      })(),
+                      current: feedbackLength,
                       min: assignment.min_char_count
                     })}
                   </p>
@@ -577,7 +604,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
             <button
               type="submit"
-              disabled={assignment.mandatory_feedback && reviewForm.feedback.length < assignment.min_char_count}
+              disabled={assignment.mandatory_feedback && feedbackLength < assignment.min_char_count}
               className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 shadow-lg transition-all disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {t('assignment.submit_review')}

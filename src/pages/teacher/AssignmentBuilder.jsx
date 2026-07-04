@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { db } from '../../lib/firebase';
-import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { Plus, Trash2, ArrowLeft, Save, GripVertical } from 'lucide-react';
+import { collection, addDoc, doc, getDoc, getDocs, updateDoc, serverTimestamp, query, where, limit } from 'firebase/firestore';
+import { Plus, Trash2, ArrowLeft, Save, GripVertical, AlertTriangle } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import { RichTextInput } from '../../components/RichTextEditor';
 import { useTranslation } from 'react-i18next';
@@ -199,12 +199,39 @@ export default function AssignmentBuilder() {
   const [reviewStartThreshold, setReviewStartThreshold] = useState(5);
   const [expectedSubmissions, setExpectedSubmissions] = useState('');
   const [timeLimit, setTimeLimit] = useState('');
+  const [timerStart, setTimerStart] = useState('typing');
   const [isVisible, setIsVisible] = useState(true);
   const [allowSubmissions, setAllowSubmissions] = useState(true);
   const [allowReviews, setAllowReviews] = useState(true);
   const [rubric, setRubric] = useState([
     { id: '1', type: 'stars', question: 'Overall Quality' }
   ]);
+  // Editing a live assignment (submissions/reviews already exist) can orphan
+  // existing ratings — surface a warning next to mode and rubric.
+  const [hasActivity, setHasActivity] = useState(false);
+
+  useEffect(() => {
+    if (!assignmentId) return;
+    const checkActivity = async () => {
+      try {
+        const [subs, revs] = await Promise.all([
+          getDocs(query(collection(db, 'submissions'), where('assignmentId', '==', assignmentId), limit(1))),
+          getDocs(query(collection(db, 'reviews'), where('assignmentId', '==', assignmentId), limit(1)))
+        ]);
+        setHasActivity(!subs.empty || !revs.empty);
+      } catch (err) {
+        console.error('Activity check error:', err);
+      }
+    };
+    checkActivity();
+  }, [assignmentId]);
+
+  const activityWarning = hasActivity && (
+    <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3 text-sm flex items-start gap-2">
+      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+      <span>{t('assignment.edit_active_warning')}</span>
+    </div>
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -230,6 +257,7 @@ export default function AssignmentBuilder() {
           setReviewStartThreshold(data.review_start_threshold);
           setExpectedSubmissions(data.expected_submissions || '');
           setTimeLimit(data.timeLimit || '');
+          setTimerStart(data.timerStart === 'open' ? 'open' : 'typing');
           setIsVisible(data.isVisible ?? true);
           setAllowSubmissions(data.allowSubmissions ?? true);
           setAllowReviews(data.allowReviews ?? true);
@@ -348,6 +376,7 @@ export default function AssignmentBuilder() {
       review_start_threshold: parseInt(reviewStartThreshold),
       expected_submissions: expectedSubmissions ? parseInt(expectedSubmissions) : null,
       timeLimit: timeLimit ? parseInt(timeLimit) : null,
+      timerStart,
       isVisible,
       allowSubmissions,
       allowReviews,
@@ -390,6 +419,7 @@ export default function AssignmentBuilder() {
         {/* Submission Mode */}
         <section className="bg-white p-6 rounded-xl border space-y-4">
           <h2 className="text-xl font-semibold mb-4">{t('assignment.submission_mode')}</h2>
+          {activityWarning}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
               type="button"
@@ -450,6 +480,25 @@ export default function AssignmentBuilder() {
                 placeholder="e.g. 45"
               />
               <p className="text-xs text-gray-500 mt-1">{t('assignment.time_limit_desc')}</p>
+
+              {timeLimit && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('assignment.timer_start_label')}</label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {['typing', 'open'].map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setTimerStart(option)}
+                        className={`text-left p-3 rounded-lg border-2 transition-all ${timerStart === option ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200 hover:border-indigo-300'}`}
+                      >
+                        <span className="font-medium text-sm text-gray-900">{t(`assignment.timer_start_${option}`)}</span>
+                        <p className="text-xs text-gray-500 mt-0.5">{t(`assignment.timer_start_${option}_desc`)}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -586,6 +635,7 @@ export default function AssignmentBuilder() {
 
         {/* Rubric Builder */}
         <section className="bg-white p-6 rounded-xl border space-y-6">
+          {activityWarning}
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">{t('assignment.grading_rubric')}</h2>
             <div className="flex gap-2">

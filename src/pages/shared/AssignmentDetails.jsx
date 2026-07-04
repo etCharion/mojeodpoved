@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot, collection, query, where, updateDoc, deleteDoc, getDocs, addDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, updateDoc, getDocs, addDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { BookOpen, Users, Star, MessageSquare, Trash2, Edit, AlertCircle, RefreshCw, Eye, EyeOff, Lock, Send, ChevronDown, ChevronUp, ArrowUpDown, Clock, RotateCcw, Plus, X, FileText, Mail } from 'lucide-react';
 import StudentAssignmentView from '../student/StudentAssignmentView';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
 import { RichTextRenderer, RichTextInput } from '../../components/RichTextEditor';
-import { runDistribution, runTeacherDistribution } from '../../lib/logic';
+import { runDistribution, runTeacherDistribution, hasContent } from '../../lib/logic';
+import { commitBatched } from '../../lib/batch';
+import { useStudentAssignmentData } from '../../hooks/useStudentAssignmentData';
 import { useTranslation } from 'react-i18next';
 
 function TextEditorModal({ initial, classStudentEmails, onClose, onSave, t }) {
@@ -132,7 +134,7 @@ function TextEditorModal({ initial, classStudentEmails, onClose, onSave, t }) {
 export default function AssignmentDetails() {
   const { t } = useTranslation();
   const { assignmentId } = useParams();
-  const { userData } = useAuth();
+  const { user, userData } = useAuth();
   const navigate = useNavigate();
   const [assignment, setAssignment] = useState(null);
   const [submissions, setSubmissions] = useState(null);
@@ -150,6 +152,15 @@ export default function AssignmentDetails() {
   const [loadError, setLoadError] = useState(false);
 
   const isTeacherMode = assignment?.mode === 'teacher';
+  const isTeacher = userData?.role === 'teacher';
+
+  // Students subscribe only to their own slice of the assignment data —
+  // subscribing to every submission and review is the teacher's job.
+  const studentData = useStudentAssignmentData({
+    assignment,
+    user,
+    enabled: !isTeacher && !!assignment
+  });
 
   const enterTestMode = () => {
     if (assignment?.mode === 'teacher') {
@@ -250,20 +261,27 @@ export default function AssignmentDetails() {
       setLoading(false);
     }, onListenerError);
 
-    const unsubSubmissions = onSnapshot(query(collection(db, 'submissions'), where('assignmentId', '==', assignmentId)), (snapshot) => {
-      setSubmissions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, onListenerError);
+    // Full submission/review streams are only needed for the teacher's
+    // monitoring view; students get their narrow slice from
+    // useStudentAssignmentData instead.
+    let unsubSubmissions = () => {};
+    let unsubReviews = () => {};
+    if (isTeacher) {
+      unsubSubmissions = onSnapshot(query(collection(db, 'submissions'), where('assignmentId', '==', assignmentId)), (snapshot) => {
+        setSubmissions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }, onListenerError);
 
-    const unsubReviews = onSnapshot(query(collection(db, 'reviews'), where('assignmentId', '==', assignmentId)), (snapshot) => {
-      setReviews(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, onListenerError);
+      unsubReviews = onSnapshot(query(collection(db, 'reviews'), where('assignmentId', '==', assignmentId)), (snapshot) => {
+        setReviews(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }, onListenerError);
+    }
 
     return () => {
       unsubAssignment();
       unsubSubmissions();
       unsubReviews();
     };
-  }, [assignmentId]);
+  }, [assignmentId, isTeacher]);
 
   useEffect(() => {
     if (!assignment?.classId) return;
@@ -307,22 +325,39 @@ export default function AssignmentDetails() {
     }
   };
 
+  // Aggregate counter decrements per document so each doc gets exactly one
+  // batched update even when several deleted reviews touch it.
+  const collectDeltas = () => {
+    const deltas = new Map();
+    const add = (docId, field) => {
+      const entry = deltas.get(docId) || {};
+      entry[field] = (entry[field] || 0) - 1;
+      deltas.set(docId, entry);
+    };
+    const toOps = () => Array.from(deltas.entries()).map(([docId, fields]) => ({
+      type: 'update',
+      ref: doc(db, 'submissions', docId),
+      data: Object.fromEntries(Object.entries(fields).map(([f, v]) => [f, increment(v)]))
+    }));
+    return { add, toOps };
+  };
+
   const handleDeleteText = async (text) => {
     if (!window.confirm(t('assignment.delete_text_confirm'))) return;
     try {
       const q = query(collection(db, 'reviews'), where('submissionId', '==', text.id));
       const snap = await getDocs(q);
-      const deletePromises = [
-        ...snap.docs.map(d => {
-          const reviewData = d.data();
-          const reviewerRef = doc(db, 'submissions', `${assignmentId}_${reviewData.reviewerId}`);
-          const updates = { givenReviewsCount: increment(-1) };
-          if (reviewData.status === 'completed') updates.givenCompletedCount = increment(-1);
-          return [deleteDoc(d.ref), updateDoc(reviewerRef, updates)];
-        }).flat(),
-        deleteDoc(doc(db, 'submissions', text.id))
-      ];
-      await Promise.all(deletePromises);
+      const { add, toOps } = collectDeltas();
+      snap.docs.forEach(d => {
+        const reviewData = d.data();
+        add(`${assignmentId}_${reviewData.reviewerId}`, 'givenReviewsCount');
+        if (reviewData.status === 'completed') add(`${assignmentId}_${reviewData.reviewerId}`, 'givenCompletedCount');
+      });
+      await commitBatched([
+        ...snap.docs.map(d => ({ type: 'delete', ref: d.ref })),
+        ...toOps(),
+        { type: 'delete', ref: doc(db, 'submissions', text.id) }
+      ]);
     } catch (err) {
       console.error("Error deleting text:", err);
       alert("Error deleting text");
@@ -335,27 +370,18 @@ export default function AssignmentDetails() {
     if (!review) return;
 
     try {
-      await deleteDoc(doc(db, 'reviews', reviewId));
-
-      // Decrement counters on the target submission
-      const subRef = doc(db, 'submissions', review.submissionId);
-      const targetUpdates = {
-        assignedCount: increment(-1)
-      };
+      // Review + both counter updates in one atomic batch
+      const targetUpdates = { assignedCount: increment(-1) };
+      const reviewerUpdates = { givenReviewsCount: increment(-1) };
       if (review.status === 'completed') {
         targetUpdates.reviewCount = increment(-1);
-      }
-      await updateDoc(subRef, targetUpdates);
-
-      // Decrement counters on the reviewer submission
-      const reviewerSubRef = doc(db, 'submissions', `${assignmentId}_${review.reviewerId}`);
-      const reviewerUpdates = {
-        givenReviewsCount: increment(-1)
-      };
-      if (review.status === 'completed') {
         reviewerUpdates.givenCompletedCount = increment(-1);
       }
-      await updateDoc(reviewerSubRef, reviewerUpdates);
+      await commitBatched([
+        { type: 'delete', ref: doc(db, 'reviews', reviewId) },
+        { type: 'update', ref: doc(db, 'submissions', review.submissionId), data: targetUpdates },
+        { type: 'update', ref: doc(db, 'submissions', `${assignmentId}_${review.reviewerId}`), data: reviewerUpdates }
+      ]);
     } catch (err) {
       console.error("Error deleting review:", err);
     }
@@ -365,21 +391,17 @@ export default function AssignmentDetails() {
     if (!window.confirm(t('assignment.delete_confirm'))) return;
     try {
       const classId = assignment.classId;
-      // 1. Delete reviews
       const qReviews = query(collection(db, 'reviews'), where('assignmentId', '==', assignmentId));
       const snapReviews = await getDocs(qReviews);
 
-      // 2. Delete submissions
       const qSubmissions = query(collection(db, 'submissions'), where('assignmentId', '==', assignmentId));
       const snapSubmissions = await getDocs(qSubmissions);
 
-      const deletePromises = [
-        ...snapReviews.docs.map(d => deleteDoc(d.ref)),
-        ...snapSubmissions.docs.map(d => deleteDoc(d.ref)),
-        deleteDoc(doc(db, 'assignments', assignmentId))
-      ];
-
-      await Promise.all(deletePromises);
+      await commitBatched([
+        ...snapReviews.docs.map(d => ({ type: 'delete', ref: d.ref })),
+        ...snapSubmissions.docs.map(d => ({ type: 'delete', ref: d.ref })),
+        { type: 'delete', ref: doc(db, 'assignments', assignmentId) }
+      ]);
       navigate(`/teacher/class/${classId}`);
     } catch (err) {
       console.error(err);
@@ -387,38 +409,45 @@ export default function AssignmentDetails() {
     }
   };
 
+  // Delete all reviews touching a submission (as target or written by its
+  // author) and return batch ops including the counter decrements on the
+  // other side of each review. Shared by delete and return-to-student.
+  const collectSubmissionReviewOps = async (sub) => {
+    // 1. Reviews where this submission is the target
+    const q1 = query(collection(db, 'reviews'), where('submissionId', '==', sub.id));
+    // 2. Reviews this student wrote
+    const q2 = query(collection(db, 'reviews'), where('reviewerId', '==', sub.studentId), where('assignmentId', '==', assignmentId));
+    const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+
+    const { add, toOps } = collectDeltas();
+    snap1.docs.forEach(d => {
+      const reviewData = d.data();
+      // decrement counters on the reviewers of this submission
+      add(`${assignmentId}_${reviewData.reviewerId}`, 'givenReviewsCount');
+      if (reviewData.status === 'completed') add(`${assignmentId}_${reviewData.reviewerId}`, 'givenCompletedCount');
+    });
+    snap2.docs.forEach(d => {
+      const reviewData = d.data();
+      // decrement counters on the targets this student reviewed
+      add(reviewData.submissionId, 'assignedCount');
+      if (reviewData.status === 'completed') add(reviewData.submissionId, 'reviewCount');
+    });
+
+    return [
+      ...snap1.docs.map(d => ({ type: 'delete', ref: d.ref })),
+      ...snap2.docs.map(d => ({ type: 'delete', ref: d.ref })),
+      ...toOps()
+    ];
+  };
+
   const handleDeleteSubmission = async (sub) => {
     if (!window.confirm(t('assignment.delete_submission_confirm'))) return;
     try {
-      // 1. Delete reviews where this submission is the target
-      const q1 = query(collection(db, 'reviews'), where('submissionId', '==', sub.id));
-      const snap1 = await getDocs(q1);
-
-      // 2. Delete reviews where this student is the reviewer
-      const q2 = query(collection(db, 'reviews'), where('reviewerId', '==', sub.studentId), where('assignmentId', '==', assignmentId));
-      const snap2 = await getDocs(q2);
-
-      const deletePromises = [
-        ...snap1.docs.map(d => {
-          const reviewData = d.data();
-          // For reviews targeting this submission, decrement counters on THEIR authors
-          const authorSubRef = doc(db, 'submissions', `${assignmentId}_${reviewData.reviewerId}`);
-          const updates = { givenReviewsCount: increment(-1) };
-          if (reviewData.status === 'completed') updates.givenCompletedCount = increment(-1);
-          return [deleteDoc(d.ref), updateDoc(authorSubRef, updates)];
-        }).flat(),
-        ...snap2.docs.map(d => {
-          const reviewData = d.data();
-          // For reviews this student wrote, decrement counters on THEIR targets
-          const targetSubRef = doc(db, 'submissions', reviewData.submissionId);
-          const updates = { assignedCount: increment(-1) };
-          if (reviewData.status === 'completed') updates.reviewCount = increment(-1);
-          return [deleteDoc(d.ref), updateDoc(targetSubRef, updates)];
-        }).flat(),
-        deleteDoc(doc(db, 'submissions', sub.id))
-      ];
-
-      await Promise.all(deletePromises);
+      const ops = await collectSubmissionReviewOps(sub);
+      await commitBatched([
+        ...ops,
+        { type: 'delete', ref: doc(db, 'submissions', sub.id) }
+      ]);
     } catch (err) {
       console.error(err);
       alert("Error deleting submission");
@@ -428,43 +457,25 @@ export default function AssignmentDetails() {
   const handleReturnSubmission = async (sub) => {
     if (!window.confirm(t('assignment.return_confirm'))) return;
     try {
-      // 1. Delete reviews where this submission is the target
-      const q1 = query(collection(db, 'reviews'), where('submissionId', '==', sub.id));
-      const snap1 = await getDocs(q1);
-
-      // 2. Delete reviews where this student is the reviewer
-      const q2 = query(collection(db, 'reviews'), where('reviewerId', '==', sub.studentId), where('assignmentId', '==', assignmentId));
-      const snap2 = await getDocs(q2);
-
-      const deletePromises = [
-        ...snap1.docs.map(d => {
-          const reviewData = d.data();
-          const authorSubRef = doc(db, 'submissions', `${assignmentId}_${reviewData.reviewerId}`);
-          const updates = { givenReviewsCount: increment(-1) };
-          if (reviewData.status === 'completed') updates.givenCompletedCount = increment(-1);
-          return [deleteDoc(d.ref), updateDoc(authorSubRef, updates)];
-        }).flat(),
-        ...snap2.docs.map(d => {
-          const reviewData = d.data();
-          const targetSubRef = doc(db, 'submissions', reviewData.submissionId);
-          const updates = { assignedCount: increment(-1) };
-          if (reviewData.status === 'completed') updates.reviewCount = increment(-1);
-          return [deleteDoc(d.ref), updateDoc(targetSubRef, updates)];
-        }).flat()
-      ];
-      await Promise.all(deletePromises);
-
-      // 3. Reset the submission
-      await updateDoc(doc(db, 'submissions', sub.id), {
-        status: 'expected',
-        content: null,
-        writingStartedAt: null,
-        reviewCount: 0,
-        assignedCount: 0,
-        givenReviewsCount: 0,
-        givenCompletedCount: 0,
-        updatedAt: serverTimestamp()
-      });
+      const ops = await collectSubmissionReviewOps(sub);
+      await commitBatched([
+        ...ops,
+        {
+          type: 'update',
+          ref: doc(db, 'submissions', sub.id),
+          data: {
+            status: 'expected',
+            content: null,
+            writingStartedAt: null,
+            submittedAt: null,
+            reviewCount: 0,
+            assignedCount: 0,
+            givenReviewsCount: 0,
+            givenCompletedCount: 0,
+            updatedAt: serverTimestamp()
+          }
+        }
+      ]);
     } catch (err) {
       console.error(err);
       alert("Error returning submission");
@@ -477,7 +488,13 @@ export default function AssignmentDetails() {
       updatedAt: serverTimestamp()
     });
     if (field === 'allowSubmissions' && value === false) {
-      await runDistribution(assignmentId);
+      // pass live data to skip the re-fetch; the local assignment state has
+      // not received the toggle from the snapshot yet, so override it
+      await runDistribution(assignmentId, {
+        assignment: { ...assignment, allowSubmissions: false },
+        submissions,
+        reviews
+      });
     }
   };
 
@@ -492,10 +509,22 @@ export default function AssignmentDetails() {
       </div>
     );
   }
-  if (loading || submissions === null || reviews === null) return <div>{t('common.loading')}</div>;
+  if (loading) return <div>{t('common.loading')}</div>;
   if (!assignment) return <div>{t('common.unknown').replace('Unknown', 'Assignment not found')}</div>;
 
-  const isTeacher = userData?.role === 'teacher';
+  if (!isTeacher) {
+    if (!studentData.loaded) return <div>{t('common.loading')}</div>;
+    return (
+      <StudentAssignmentView
+        assignment={assignment}
+        submissions={studentData.submissions}
+        reviews={studentData.reviews}
+        submittedCount={studentData.submittedCount}
+      />
+    );
+  }
+
+  if (submissions === null || reviews === null) return <div>{t('common.loading')}</div>;
 
   const toggleExpand = (id) => {
     const newExpanded = new Set(expandedReviews);
@@ -551,10 +580,6 @@ export default function AssignmentDetails() {
       return 0;
     });
 
-  if (!isTeacher) {
-    return <StudentAssignmentView assignment={assignment} submissions={submissions} reviews={reviews} />;
-  }
-
   if (testMode) {
     return (
       <div className="space-y-4">
@@ -607,7 +632,12 @@ export default function AssignmentDetails() {
           </button>
 
           <button
-            onClick={() => isTeacherMode ? runTeacherDistribution(assignmentId) : runDistribution(assignmentId)}
+            onClick={() => {
+              const preloaded = { assignment, submissions, reviews };
+              return isTeacherMode
+                ? runTeacherDistribution(assignmentId, preloaded)
+                : runDistribution(assignmentId, preloaded);
+            }}
             className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
             title={t('assignment.redistribute')}
           >
@@ -929,6 +959,8 @@ export default function AssignmentDetails() {
                         <div className="flex items-center justify-between">
                           {isExpected ? (
                             <span className="text-sm font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded">{t('assignment.status_expected')}</span>
+                          ) : !hasContent(sub) ? (
+                            <span className="text-sm font-medium text-red-600 bg-red-50 px-2 py-1 rounded" title={t('assignment.status_empty_desc')}>{t('assignment.status_empty')}</span>
                           ) : (
                             <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">{t('assignment.status_submitted')}</span>
                           )}

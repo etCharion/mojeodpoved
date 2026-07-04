@@ -42,13 +42,12 @@ service cloud.firestore {
     }
 
     // Classes
+    // Reads are open to any authenticated user. Students who are not members
+    // yet must read a class to join it (by link, QR, or join code) and to see
+    // their pending-approval status on the dashboard, which uses an unfiltered
+    // list query — a membership-based rule denies that whole query.
     match /classes/{classId} {
-      allow read: if isAuthenticated() && (
-        resource.data.teacherId == request.auth.uid ||
-        request.auth.uid in resource.data.studentUids ||
-        request.auth.token.email.lower() in resource.data.studentEmails ||
-        resource.data.pendingStudents.status == "pending" // Simplified check for pending
-      );
+      allow read: if isAuthenticated();
       // Students can update classes to join (pendingStudents array)
       allow update: if isAuthenticated() && (
         resource.data.teacherId == request.auth.uid ||
