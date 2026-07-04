@@ -6,7 +6,8 @@ import { doc, updateDoc, setDoc, serverTimestamp, increment, writeBatch } from '
 import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, RefreshCw, Users, BookOpen, ArrowLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
-import { useRichTextEditor, EditorToolbar, RichTextRenderer, RichTextInput, stripHtml } from '../../components/RichTextEditor';
+import { useRichTextEditor, EditorToolbar, RichTextRenderer, RichTextInput } from '../../components/RichTextEditor';
+import { stripHtml } from '../../lib/text';
 import { runDistribution, runTeacherDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 

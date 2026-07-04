@@ -277,15 +277,6 @@ export const EditorToolbar = ({
   );
 };
 
-// Plain text of an HTML fragment — the single source of truth for
-// "how many characters did the student actually write" checks.
-export const stripHtml = (html) => {
-  if (!html) return '';
-  const div = document.createElement('div');
-  div.innerHTML = html;
-  return div.textContent || div.innerText || '';
-};
-
 export const RichTextRenderer = ({ content, className = "" }) => {
   // If content is plain text (doesn't look like HTML), wrap newlines in <p> or use whitespace-pre-wrap
   const processedContent = React.useMemo(() => {
