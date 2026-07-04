@@ -1,15 +1,9 @@
 import { db } from './firebase';
 import { collection, query, where, getDocs, getDoc, doc, serverTimestamp, runTransaction, increment } from 'firebase/firestore';
+import { isFullDistribution, distributePeer, distributeTeacher } from './distribution';
 
-// Plain-text check: does the submission carry any real content?
-// (auto-submitted empty work should not enter the review pool)
-export const hasContent = (submission) =>
-  !!(submission.content?.text || '').replace(/<[^>]*>/g, '').trim();
-
-// Time a work was actually submitted. Falls back to createdAt for legacy
-// docs (placeholder creation time), which was the old sort key.
-const submissionTime = (s) =>
-  s.submittedAt?.toMillis?.() || s.createdAt?.toMillis?.() || 0;
+// Re-exported for UI code (teacher's submissions table)
+export { hasContent } from './distribution';
 
 const tryAssignReview = async (reviewerId, reviewerName, candidate, assignmentId, classId, N, targetLimit) => {
   try {
@@ -123,93 +117,52 @@ const tryAssignTeacherReview = async (reviewer, candidate, assignmentId, classId
   }
 };
 
+const fetchAssignment = async (assignmentId) => {
+  const snap = await getDoc(doc(db, 'assignments', assignmentId));
+  return snap.exists() ? snap.data() : null;
+};
+
+const fetchByAssignment = async (collectionName, assignmentId) => {
+  const snap = await getDocs(query(collection(db, collectionName), where('assignmentId', '==', assignmentId)));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+};
+
 // Distribution for the "teacher provides texts" mode.
-// Teacher-provided texts are spread across the students who have opened the
-// assignment (the reviewers). Each text is reviewed up to N times, work is
-// balanced across reviewers, and a reviewer never gets a text they own.
-export const runTeacherDistribution = async (assignmentId) => {
+// `preloaded` may carry { assignment, submissions, reviews } that the caller
+// already has from live listeners, saving a full re-fetch. The transactions
+// in tryAssignTeacherReview re-check every limit, so slightly stale input is
+// safe — at worst an assignment attempt is skipped.
+export const runTeacherDistribution = async (assignmentId, preloaded = {}) => {
   try {
-    const assignmentSnap = await getDocs(query(collection(db, 'assignments'), where('__name__', '==', assignmentId)));
-    if (assignmentSnap.empty) return;
-    const assignmentData = assignmentSnap.docs[0].data();
+    const assignmentData = preloaded.assignment || await fetchAssignment(assignmentId);
+    if (!assignmentData) return;
 
     if (assignmentData.allowReviews === false) return;
     const N = assignmentData.reviews_per_submission;
 
-    const subsSnapshot = await getDocs(query(collection(db, 'submissions'), where('assignmentId', '==', assignmentId)));
-    const allDocs = subsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const allDocs = preloaded.submissions || await fetchByAssignment('submissions', assignmentId);
 
     const texts = allDocs.filter(s => s.isTeacherText);
     const reviewers = allDocs.filter(s => s.status === 'reviewer');
 
     if (texts.length === 0 || reviewers.length === 0) return;
 
-    const reviewsSnapshot = await getDocs(query(collection(db, 'reviews'), where('assignmentId', '==', assignmentId)));
-    const reviews = reviewsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const reviews = preloaded.reviews || await fetchByAssignment('reviews', assignmentId);
 
-    const receivedCountMap = {};
-    texts.forEach(tx => {
-      const actual = reviews.filter(r => r.submissionId === tx.id).length;
-      receivedCountMap[tx.id] = Math.max(tx.assignedCount || 0, actual);
-    });
-
-    const reviewerState = {};
-    reviewers.forEach(rv => {
-      const mine = reviews.filter(r => r.reviewerId === rv.studentId);
-      reviewerState[rv.studentId] = {
-        assigned: Math.max(rv.givenReviewsCount || 0, mine.length),
-        completed: Math.max(rv.givenCompletedCount || 0, mine.filter(r => r.status === 'completed').length),
-        textIds: mine.map(r => r.submissionId)
-      };
-    });
-
-    // Rolling distribution: give each reviewer one pending text at a time.
-    const sortedReviewers = [...reviewers].sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
-
-    for (const rv of sortedReviewers) {
-      const state = reviewerState[rv.studentId];
-      const target = state.completed + 1;
-      const reviewerEmail = (rv.email || '').toLowerCase();
-
-      while (state.assigned < target) {
-        const candidates = texts
-          .filter(tx => (receivedCountMap[tx.id] || 0) < N)
-          .filter(tx => !state.textIds.includes(tx.id))
-          .filter(tx => !(tx.ownerEmails || []).includes(reviewerEmail))
-          .sort((a, b) => {
-            const diff = (receivedCountMap[a.id] || 0) - (receivedCountMap[b.id] || 0);
-            if (diff !== 0) return diff;
-            return (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0);
-          });
-
-        if (candidates.length === 0) break;
-
-        let assigned = false;
-        for (const candidate of candidates) {
-          const success = await tryAssignTeacherReview(rv, candidate, assignmentId, rv.classId, N);
-          if (success) {
-            state.textIds.push(candidate.id);
-            receivedCountMap[candidate.id] = (receivedCountMap[candidate.id] || 0) + 1;
-            state.assigned++;
-            assigned = true;
-            break;
-          }
-        }
-
-        if (!assigned) break;
-      }
-    }
+    await distributeTeacher(
+      { texts, reviewers, reviews, N },
+      (reviewer, candidate) => tryAssignTeacherReview(reviewer, candidate, assignmentId, reviewer.classId, N)
+    );
   } catch (err) {
     console.error("Teacher Distribution Error: ", err);
   }
 };
 
-export const runDistribution = async (assignmentId) => {
+export const runDistribution = async (assignmentId, preloaded = {}) => {
   try {
-    // 1. Fetch assignment settings
-    const assignmentSnap = await getDocs(query(collection(db, 'assignments'), where('__name__', '==', assignmentId)));
-    if (assignmentSnap.empty) return;
-    const assignmentData = assignmentSnap.docs[0].data();
+    // 1. Assignment settings
+    const assignmentData = preloaded.assignment || await fetchAssignment(assignmentId);
+    if (!assignmentData) return;
     const {
       reviews_per_submission: N,
       review_start_threshold: M,
@@ -217,10 +170,8 @@ export const runDistribution = async (assignmentId) => {
       allowSubmissions
     } = assignmentData;
 
-    // 2. Fetch all submissions (including placeholders)
-    const subsQuery = query(collection(db, 'submissions'), where('assignmentId', '==', assignmentId));
-    const subsSnapshot = await getDocs(subsQuery);
-    const allParticipants = subsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    // 2. All submissions (including placeholders)
+    const allParticipants = preloaded.submissions || await fetchByAssignment('submissions', assignmentId);
 
     // Filter to those who actually submitted work
     const submittedWorks = allParticipants.filter(s => s.status !== 'expected');
@@ -228,91 +179,32 @@ export const runDistribution = async (assignmentId) => {
     // Distribution only starts when M works are submitted
     if (submittedWorks.length < M) return;
 
-    // Determine if we should distribute all N reviews or just one-by-one.
     // Without an explicit expected count, compare against the class roster,
     // not against placeholder docs (those only count students who opened
     // the assignment, so full distribution could fire too early or never).
     let classSize = 0;
-    if (!expectedCount && assignmentData.classId) {
+    if (!expectedCount && allowSubmissions !== false && assignmentData.classId) {
       const classSnap = await getDoc(doc(db, 'classes', assignmentData.classId));
       classSize = classSnap.exists() ? (classSnap.data().studentUids || []).length : 0;
     }
-    const expectedTotal = expectedCount || classSize || allParticipants.length;
-    const everyoneSubmitted = submittedWorks.length >= expectedTotal;
 
-    const isFullDistribution = (allowSubmissions === false) || everyoneSubmitted;
-
-    // 3. Fetch all current reviews
-    const reviewsQuery = query(collection(db, 'reviews'), where('assignmentId', '==', assignmentId));
-    const reviewsSnapshot = await getDocs(reviewsQuery);
-    const reviews = reviewsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-
-    // Map to track who is reviewing what
-    const assignmentsMap = {}; // reviewerId -> [submissionId]
-    const receivedCountMap = {}; // submissionId -> count
-    const completedCountMap = {}; // reviewerId -> count of completed reviews
-    const assignedToMeCountMap = {}; // reviewerId -> count of assigned reviews
-
-    submittedWorks.forEach(s => {
-      assignmentsMap[s.studentId] = [];
-
-      const reviewsWrittenByThisSub = reviews.filter(r => r.reviewerId === s.studentId);
-      completedCountMap[s.studentId] = Math.max(s.givenCompletedCount || 0, reviewsWrittenByThisSub.filter(r => r.status === 'completed').length);
-      assignedToMeCountMap[s.studentId] = Math.max(s.givenReviewsCount || 0, reviewsWrittenByThisSub.length);
-
-      reviewsWrittenByThisSub.forEach(r => assignmentsMap[s.studentId].push(r.submissionId));
+    const fullDistribution = isFullDistribution({
+      allowSubmissions,
+      expectedCount,
+      classSize,
+      submittedCount: submittedWorks.length,
+      participantCount: allParticipants.length
     });
 
-    submittedWorks.forEach(s => {
-      const reviewsForThisSub = reviews.filter(r => r.submissionId === s.id).length;
-      // We take the max of assignedCount and actual reviews to be safe
-      receivedCountMap[s.id] = Math.max(s.assignedCount || 0, reviewsForThisSub);
-    });
+    // 3. All current reviews
+    const reviews = preloaded.reviews || await fetchByAssignment('reviews', assignmentId);
 
-    // 4. Distribution Loop
-    // Sort students by submission time to be fair
-    const students = [...submittedWorks].sort((a, b) => submissionTime(a) - submissionTime(b));
-
-    // Only works with actual content can be reviewed (empty auto-submits
-    // still make their author a reviewer, but nobody is asked to grade them)
-    const reviewableWorks = submittedWorks.filter(hasContent);
-
-    for (const studentSub of students) {
-      const studentId = studentSub.studentId;
-      const completedByMe = completedCountMap[studentId] || 0;
-
-      // In rolling mode, we only assign 1 review more than what's completed, up to N.
-      // In full mode, we assign everything up to N.
-      const targetLimit = isFullDistribution ? N : Math.min(completedByMe + 1, N);
-
-      while (assignedToMeCountMap[studentId] < targetLimit && assignedToMeCountMap[studentId] < N) {
-        const candidates = reviewableWorks
-          .filter(s => s.studentId !== studentId && !assignmentsMap[studentId].includes(s.id))
-          .filter(s => (receivedCountMap[s.id] || 0) < N) // Strict limit check
-          .sort((a, b) => {
-            const diff = (receivedCountMap[a.id] || 0) - (receivedCountMap[b.id] || 0);
-            if (diff !== 0) return diff;
-            return submissionTime(a) - submissionTime(b);
-          });
-
-        if (candidates.length === 0) break;
-
-        let successfullyAssigned = false;
-        // Try candidates one by one until one succeeds (transactionally)
-        for (const candidate of candidates) {
-          const success = await tryAssignReview(studentId, studentSub.studentName, candidate, assignmentId, studentSub.classId, N, targetLimit);
-          if (success) {
-            assignmentsMap[studentId].push(candidate.id);
-            receivedCountMap[candidate.id] = (receivedCountMap[candidate.id] || 0) + 1;
-            assignedToMeCountMap[studentId]++;
-            successfullyAssigned = true;
-            break;
-          }
-        }
-
-        if (!successfullyAssigned) break; // No more candidates can be assigned right now
-      }
-    }
+    // 4. Distribution loop (pure core, transactional assignment)
+    await distributePeer(
+      { submittedWorks, reviews, N, fullDistribution },
+      (reviewerSub, candidate, targetLimit) =>
+        tryAssignReview(reviewerSub.studentId, reviewerSub.studentName, candidate, assignmentId, reviewerSub.classId, N, targetLimit)
+    );
   } catch (err) {
     console.error("Distribution Error: ", err);
   }
