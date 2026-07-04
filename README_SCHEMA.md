@@ -30,6 +30,9 @@
 - `reviews_per_submission`: number (N — in `teacher` mode this is reviews per text)
 - `review_start_threshold`: number (M — peer mode only)
 - `mode`: 'peer' | 'teacher' (default 'peer'). In `teacher` mode the teacher provides the texts to review (see below); students act only as reviewers.
+- `timeLimit`: number | null (minutes of writing time, peer mode only)
+- `timerStart`: 'typing' | 'open' (default 'typing') — whether the countdown starts on the first keystroke or as soon as the student opens the assignment
+- `expected_submissions`: number | null (peer mode; when empty the class roster size is used to decide "everyone submitted")
 - `status`: 'open' | 'closed'
 - `createdAt`: timestamp
 
@@ -47,6 +50,8 @@ A submission doc is one of three shapes depending on the assignment mode:
 - `assignedCount`: number (how many reviewers it has been ASSIGNED to, including pending ones)
 - `givenReviewsCount`: number (how many reviews this student has been ASSIGNED to write)
 - `givenCompletedCount`: number (how many reviews this student has COMPLETED writing)
+- `writingStartedAt`: timestamp (when the countdown started, only with `timeLimit`)
+- `submittedAt`: timestamp (when the work was actually submitted; `createdAt` is the placeholder/first-open time)
 - `createdAt`: timestamp
 
 **Teacher-provided text** (`mode: 'teacher'`):

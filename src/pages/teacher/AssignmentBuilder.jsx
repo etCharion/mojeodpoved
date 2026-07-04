@@ -199,6 +199,7 @@ export default function AssignmentBuilder() {
   const [reviewStartThreshold, setReviewStartThreshold] = useState(5);
   const [expectedSubmissions, setExpectedSubmissions] = useState('');
   const [timeLimit, setTimeLimit] = useState('');
+  const [timerStart, setTimerStart] = useState('typing');
   const [isVisible, setIsVisible] = useState(true);
   const [allowSubmissions, setAllowSubmissions] = useState(true);
   const [allowReviews, setAllowReviews] = useState(true);
@@ -230,6 +231,7 @@ export default function AssignmentBuilder() {
           setReviewStartThreshold(data.review_start_threshold);
           setExpectedSubmissions(data.expected_submissions || '');
           setTimeLimit(data.timeLimit || '');
+          setTimerStart(data.timerStart === 'open' ? 'open' : 'typing');
           setIsVisible(data.isVisible ?? true);
           setAllowSubmissions(data.allowSubmissions ?? true);
           setAllowReviews(data.allowReviews ?? true);
@@ -348,6 +350,7 @@ export default function AssignmentBuilder() {
       review_start_threshold: parseInt(reviewStartThreshold),
       expected_submissions: expectedSubmissions ? parseInt(expectedSubmissions) : null,
       timeLimit: timeLimit ? parseInt(timeLimit) : null,
+      timerStart,
       isVisible,
       allowSubmissions,
       allowReviews,
@@ -450,6 +453,25 @@ export default function AssignmentBuilder() {
                 placeholder="e.g. 45"
               />
               <p className="text-xs text-gray-500 mt-1">{t('assignment.time_limit_desc')}</p>
+
+              {timeLimit && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('assignment.timer_start_label')}</label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {['typing', 'open'].map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setTimerStart(option)}
+                        className={`text-left p-3 rounded-lg border-2 transition-all ${timerStart === option ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200 hover:border-indigo-300'}`}
+                      >
+                        <span className="font-medium text-sm text-gray-900">{t(`assignment.timer_start_${option}`)}</span>
+                        <p className="text-xs text-gray-500 mt-0.5">{t(`assignment.timer_start_${option}_desc`)}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>

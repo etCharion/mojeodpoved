@@ -138,6 +138,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       // Only create placeholder for students if it doesn't exist yet
       if (user && assignment && !mySubmission && assignment.allowSubmissions !== false) {
         const subId = `${assignment.id}_${user.uid}`;
+        // With timerStart 'open' the countdown runs from the first page open,
+        // so the placeholder itself starts the clock.
+        const startTimerNow = !!assignment.timeLimit && assignment.timerStart === 'open';
         if (isTestMode) {
           setMockSubmissions(prev => {
             if (prev.find(s => s.id === subId)) return prev;
@@ -152,6 +155,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               assignedCount: 0,
               givenReviewsCount: 0,
               givenCompletedCount: 0,
+              ...(startTimerNow ? { writingStartedAt: { toMillis: () => Date.now() } } : {}),
               createdAt: { toMillis: () => Date.now() }
             }];
           });
@@ -168,6 +172,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
             assignedCount: 0,
             givenReviewsCount: 0,
             givenCompletedCount: 0,
+            ...(startTimerNow ? { writingStartedAt: serverTimestamp() } : {}),
             createdAt: serverTimestamp()
           }, { merge: true });
         } catch (err) {
@@ -413,7 +418,8 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const handleTextChange = async (newHtml) => {
     setText(newHtml);
 
-    if (assignment.timeLimit && !mySubmission?.writingStartedAt) {
+    // In 'open' mode the clock already started with the placeholder
+    if (assignment.timeLimit && assignment.timerStart !== 'open' && !mySubmission?.writingStartedAt) {
       const subId = `${assignment.id}_${user.uid}`;
       if (isTestMode) {
         setMockSubmissions(prev => prev.map(s => s.id === subId ? {
