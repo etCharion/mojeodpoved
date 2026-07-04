@@ -11,7 +11,7 @@ import { stripHtml } from '../../lib/text';
 import { runDistribution, runTeacherDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
-export default function StudentAssignmentView({ assignment, submissions, reviews, isTestMode, setMockSubmissions, setMockReviews }) {
+export default function StudentAssignmentView({ assignment, submissions, reviews, submittedCount: submittedCountProp, isTestMode, setMockSubmissions, setMockReviews }) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const isTeacherMode = assignment.mode === 'teacher';
@@ -184,7 +184,10 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
     createPlaceholder();
   }, [user, assignment, mySubmission, submissions, isTestMode, isTeacherMode, setMockSubmissions]);
 
-  const submittedCount = (submissions || []).filter(s => s.status !== 'expected' && s.status !== 'reviewer').length;
+  // With narrow subscriptions the student no longer sees every submission,
+  // so the count comes from an aggregate query (prop); test mode and other
+  // full-data callers fall back to counting the array.
+  const submittedCount = submittedCountProp ?? (submissions || []).filter(s => s.status !== 'expected' && s.status !== 'reviewer').length;
   const canReview = isTeacherMode ? true : submittedCount >= assignment.review_start_threshold;
   const reviewsNeeded = assignment.reviews_per_submission;
   const reviewsCompleted = myReviewsGiven.filter(r => r.status === 'completed').length;
@@ -201,15 +204,10 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
     let missingTask;
     if (isTeacherMode) {
-      const hasPending = myReviewsGiven.some(r => r.status !== 'completed');
-      const myReviewedIds = myReviewsGiven.map(r => r.submissionId);
-      const availableText = submissions.some(s =>
-        s.isTeacherText &&
-        !myReviewedIds.includes(s.id) &&
-        !(s.ownerEmails || []).includes(myEmail) &&
-        (s.assignedCount || 0) < assignment.reviews_per_submission
-      );
-      missingTask = !hasPending && availableText;
+      // The narrow data slice doesn't include all teacher texts, so we can't
+      // tell locally whether one is still available — run the (bounded,
+      // once-per-load) catch-up whenever there is no pending task.
+      missingTask = !myReviewsGiven.some(r => r.status !== 'completed');
     } else {
       const target = Math.min(reviewsCompleted + 1, reviewsNeeded);
       missingTask = myReviewsGiven.length < target;
@@ -220,7 +218,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
       (isTeacherMode ? runTeacherDistribution(assignment.id) : runDistribution(assignment.id))
         .catch(err => console.error('Distribution catch-up error:', err));
     }
-  }, [submissions, reviews, isTestMode, isTeacherMode, canReview, isSubmitted, assignment, myEmail, myReviewsGiven, reviewsCompleted, reviewsNeeded]);
+  }, [submissions, reviews, isTestMode, isTeacherMode, canReview, isSubmitted, assignment, myReviewsGiven, reviewsCompleted, reviewsNeeded]);
 
   const formatTime = (ms) => {
     const totalSeconds = Math.floor(ms / 1000);

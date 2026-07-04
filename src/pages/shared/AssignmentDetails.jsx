@@ -10,6 +10,7 @@ import RubricDisplay from '../../components/RubricDisplay';
 import { RichTextRenderer, RichTextInput } from '../../components/RichTextEditor';
 import { runDistribution, runTeacherDistribution, hasContent } from '../../lib/logic';
 import { commitBatched } from '../../lib/batch';
+import { useStudentAssignmentData } from '../../hooks/useStudentAssignmentData';
 import { useTranslation } from 'react-i18next';
 
 function TextEditorModal({ initial, classStudentEmails, onClose, onSave, t }) {
@@ -133,7 +134,7 @@ function TextEditorModal({ initial, classStudentEmails, onClose, onSave, t }) {
 export default function AssignmentDetails() {
   const { t } = useTranslation();
   const { assignmentId } = useParams();
-  const { userData } = useAuth();
+  const { user, userData } = useAuth();
   const navigate = useNavigate();
   const [assignment, setAssignment] = useState(null);
   const [submissions, setSubmissions] = useState(null);
@@ -151,6 +152,15 @@ export default function AssignmentDetails() {
   const [loadError, setLoadError] = useState(false);
 
   const isTeacherMode = assignment?.mode === 'teacher';
+  const isTeacher = userData?.role === 'teacher';
+
+  // Students subscribe only to their own slice of the assignment data —
+  // subscribing to every submission and review is the teacher's job.
+  const studentData = useStudentAssignmentData({
+    assignment,
+    user,
+    enabled: !isTeacher && !!assignment
+  });
 
   const enterTestMode = () => {
     if (assignment?.mode === 'teacher') {
@@ -251,20 +261,27 @@ export default function AssignmentDetails() {
       setLoading(false);
     }, onListenerError);
 
-    const unsubSubmissions = onSnapshot(query(collection(db, 'submissions'), where('assignmentId', '==', assignmentId)), (snapshot) => {
-      setSubmissions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, onListenerError);
+    // Full submission/review streams are only needed for the teacher's
+    // monitoring view; students get their narrow slice from
+    // useStudentAssignmentData instead.
+    let unsubSubmissions = () => {};
+    let unsubReviews = () => {};
+    if (isTeacher) {
+      unsubSubmissions = onSnapshot(query(collection(db, 'submissions'), where('assignmentId', '==', assignmentId)), (snapshot) => {
+        setSubmissions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }, onListenerError);
 
-    const unsubReviews = onSnapshot(query(collection(db, 'reviews'), where('assignmentId', '==', assignmentId)), (snapshot) => {
-      setReviews(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, onListenerError);
+      unsubReviews = onSnapshot(query(collection(db, 'reviews'), where('assignmentId', '==', assignmentId)), (snapshot) => {
+        setReviews(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }, onListenerError);
+    }
 
     return () => {
       unsubAssignment();
       unsubSubmissions();
       unsubReviews();
     };
-  }, [assignmentId]);
+  }, [assignmentId, isTeacher]);
 
   useEffect(() => {
     if (!assignment?.classId) return;
@@ -471,7 +488,13 @@ export default function AssignmentDetails() {
       updatedAt: serverTimestamp()
     });
     if (field === 'allowSubmissions' && value === false) {
-      await runDistribution(assignmentId);
+      // pass live data to skip the re-fetch; the local assignment state has
+      // not received the toggle from the snapshot yet, so override it
+      await runDistribution(assignmentId, {
+        assignment: { ...assignment, allowSubmissions: false },
+        submissions,
+        reviews
+      });
     }
   };
 
@@ -486,10 +509,22 @@ export default function AssignmentDetails() {
       </div>
     );
   }
-  if (loading || submissions === null || reviews === null) return <div>{t('common.loading')}</div>;
+  if (loading) return <div>{t('common.loading')}</div>;
   if (!assignment) return <div>{t('common.unknown').replace('Unknown', 'Assignment not found')}</div>;
 
-  const isTeacher = userData?.role === 'teacher';
+  if (!isTeacher) {
+    if (!studentData.loaded) return <div>{t('common.loading')}</div>;
+    return (
+      <StudentAssignmentView
+        assignment={assignment}
+        submissions={studentData.submissions}
+        reviews={studentData.reviews}
+        submittedCount={studentData.submittedCount}
+      />
+    );
+  }
+
+  if (submissions === null || reviews === null) return <div>{t('common.loading')}</div>;
 
   const toggleExpand = (id) => {
     const newExpanded = new Set(expandedReviews);
@@ -545,10 +580,6 @@ export default function AssignmentDetails() {
       return 0;
     });
 
-  if (!isTeacher) {
-    return <StudentAssignmentView assignment={assignment} submissions={submissions} reviews={reviews} />;
-  }
-
   if (testMode) {
     return (
       <div className="space-y-4">
@@ -601,7 +632,12 @@ export default function AssignmentDetails() {
           </button>
 
           <button
-            onClick={() => isTeacherMode ? runTeacherDistribution(assignmentId) : runDistribution(assignmentId)}
+            onClick={() => {
+              const preloaded = { assignment, submissions, reviews };
+              return isTeacherMode
+                ? runTeacherDistribution(assignmentId, preloaded)
+                : runDistribution(assignmentId, preloaded);
+            }}
             className="flex items-center gap-2 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
             title={t('assignment.redistribute')}
           >
