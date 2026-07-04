@@ -157,6 +157,7 @@ const resources = {
         timer_start_typing_desc: 'Čas na přečtení zadání se nepočítá. Odpočet spustí až první napsaný znak.',
         timer_start_open: 'Otevřením zadání',
         timer_start_open_desc: 'Odpočet běží od chvíle, kdy student zadání poprvé otevře. Vhodné pro písemky.',
+        edit_active_warning: 'U tohoto úkolu už existují odevzdání nebo hodnocení. Změna režimu či rubriky může způsobit, že stávající hodnocení přestanou dávat smysl.',
         return_submission: 'Vrátit k přepracování',
         return_confirm: 'Opravdu chcete vrátit tuto práci k přepracování? Tím se smaže aktuální obsah a student bude moci začít znovu.',
 
@@ -424,6 +425,7 @@ const resources = {
         timer_start_typing_desc: 'Reading the instructions is not counted. The countdown starts with the first typed character.',
         timer_start_open: 'When the assignment is opened',
         timer_start_open_desc: 'The countdown runs from the moment the student first opens the assignment. Suitable for tests.',
+        edit_active_warning: 'This assignment already has submissions or reviews. Changing the mode or the rubric may make existing reviews inconsistent.',
         return_submission: 'Return for revision',
         return_confirm: 'Are you sure you want to return this work for revision? This will clear the current content and allow the student to start over.',
 

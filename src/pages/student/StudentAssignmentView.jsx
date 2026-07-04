@@ -6,7 +6,7 @@ import { doc, updateDoc, setDoc, serverTimestamp, increment, writeBatch } from '
 import { Send, CheckCircle, Clock, Star, MessageSquare, AlertCircle, RefreshCw, Users, BookOpen, ArrowLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
-import { useRichTextEditor, EditorToolbar, RichTextRenderer, RichTextInput } from '../../components/RichTextEditor';
+import { useRichTextEditor, EditorToolbar, RichTextRenderer, RichTextInput, stripHtml } from '../../components/RichTextEditor';
 import { runDistribution, runTeacherDistribution } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
@@ -333,10 +333,8 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
 
-    // For validation, we might want to strip HTML tags to count real characters
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = reviewForm.feedback;
-    const plainFeedback = tempDiv.textContent || tempDiv.innerText || '';
+    // For validation, strip HTML tags to count real characters
+    const plainFeedback = stripHtml(reviewForm.feedback);
 
     if (assignment.mandatory_feedback && plainFeedback.length < assignment.min_char_count) {
       alert(t('assignment.char_required').replace('{{current}}', plainFeedback.length).replace('{{min}}', assignment.min_char_count));
@@ -491,6 +489,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
   // If in review mode
   if (activeReview) {
+    const feedbackLength = stripHtml(reviewForm.feedback).length;
     return (
       <div className="space-y-8 pb-20" style={{
         '--selection-color': isEraserActive ? '#cbd5e1' : (activeColor || '#bfdbfe'),
@@ -594,18 +593,9 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
               </div>
               {assignment.mandatory_feedback && (
                 <div className="px-6 pb-6">
-                  <p className={`text-xs ${(() => {
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = reviewForm.feedback;
-                    const len = (tempDiv.textContent || tempDiv.innerText || '').length;
-                    return len < assignment.min_char_count ? 'text-red-500' : 'text-green-600';
-                  })()}`}>
+                  <p className={`text-xs ${feedbackLength < assignment.min_char_count ? 'text-red-500' : 'text-green-600'}`}>
                     {t('assignment.char_required', {
-                      current: (() => {
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = reviewForm.feedback;
-                        return (tempDiv.textContent || tempDiv.innerText || '').length;
-                      })(),
+                      current: feedbackLength,
                       min: assignment.min_char_count
                     })}
                   </p>
@@ -615,7 +605,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
 
             <button
               type="submit"
-              disabled={assignment.mandatory_feedback && reviewForm.feedback.length < assignment.min_char_count}
+              disabled={assignment.mandatory_feedback && feedbackLength < assignment.min_char_count}
               className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 shadow-lg transition-all disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {t('assignment.submit_review')}
