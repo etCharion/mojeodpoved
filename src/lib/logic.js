@@ -1,5 +1,15 @@
 import { db } from './firebase';
-import { collection, query, where, getDocs, doc, serverTimestamp, runTransaction, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, doc, serverTimestamp, runTransaction, increment } from 'firebase/firestore';
+
+// Plain-text check: does the submission carry any real content?
+// (auto-submitted empty work should not enter the review pool)
+export const hasContent = (submission) =>
+  !!(submission.content?.text || '').replace(/<[^>]*>/g, '').trim();
+
+// Time a work was actually submitted. Falls back to createdAt for legacy
+// docs (placeholder creation time), which was the old sort key.
+const submissionTime = (s) =>
+  s.submittedAt?.toMillis?.() || s.createdAt?.toMillis?.() || 0;
 
 const tryAssignReview = async (reviewerId, reviewerName, candidate, assignmentId, classId, N, targetLimit) => {
   try {
@@ -76,6 +86,12 @@ const tryAssignTeacherReview = async (reviewer, candidate, assignmentId, classId
 
       const textData = textSnap.data();
       if ((textData.assignedCount || 0) >= N) return false;
+
+      // Rolling limit for the reviewer too: at most one pending text at a
+      // time. Without this, concurrent distribution runs (several students
+      // finishing at once) can hand one reviewer several texts in parallel.
+      const reviewerData = reviewerSnap.data();
+      if ((reviewerData.givenReviewsCount || 0) > (reviewerData.givenCompletedCount || 0)) return false;
 
       const reviewId = `${reviewer.studentId}_${candidate.id}`;
       const reviewRef = doc(db, 'reviews', reviewId);
@@ -212,10 +228,17 @@ export const runDistribution = async (assignmentId) => {
     // Distribution only starts when M works are submitted
     if (submittedWorks.length < M) return;
 
-    // Determine if we should distribute all N reviews or just one-by-one
-    const everyoneSubmitted = expectedCount
-      ? submittedWorks.length >= expectedCount
-      : submittedWorks.length >= allParticipants.length;
+    // Determine if we should distribute all N reviews or just one-by-one.
+    // Without an explicit expected count, compare against the class roster,
+    // not against placeholder docs (those only count students who opened
+    // the assignment, so full distribution could fire too early or never).
+    let classSize = 0;
+    if (!expectedCount && assignmentData.classId) {
+      const classSnap = await getDoc(doc(db, 'classes', assignmentData.classId));
+      classSize = classSnap.exists() ? (classSnap.data().studentUids || []).length : 0;
+    }
+    const expectedTotal = expectedCount || classSize || allParticipants.length;
+    const everyoneSubmitted = submittedWorks.length >= expectedTotal;
 
     const isFullDistribution = (allowSubmissions === false) || everyoneSubmitted;
 
@@ -248,7 +271,11 @@ export const runDistribution = async (assignmentId) => {
 
     // 4. Distribution Loop
     // Sort students by submission time to be fair
-    const students = [...submittedWorks].sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0));
+    const students = [...submittedWorks].sort((a, b) => submissionTime(a) - submissionTime(b));
+
+    // Only works with actual content can be reviewed (empty auto-submits
+    // still make their author a reviewer, but nobody is asked to grade them)
+    const reviewableWorks = submittedWorks.filter(hasContent);
 
     for (const studentSub of students) {
       const studentId = studentSub.studentId;
@@ -259,13 +286,13 @@ export const runDistribution = async (assignmentId) => {
       const targetLimit = isFullDistribution ? N : Math.min(completedByMe + 1, N);
 
       while (assignedToMeCountMap[studentId] < targetLimit && assignedToMeCountMap[studentId] < N) {
-        const candidates = submittedWorks
+        const candidates = reviewableWorks
           .filter(s => s.studentId !== studentId && !assignmentsMap[studentId].includes(s.id))
           .filter(s => (receivedCountMap[s.id] || 0) < N) // Strict limit check
           .sort((a, b) => {
             const diff = (receivedCountMap[a.id] || 0) - (receivedCountMap[b.id] || 0);
             if (diff !== 0) return diff;
-            return (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0);
+            return submissionTime(a) - submissionTime(b);
           });
 
         if (candidates.length === 0) break;

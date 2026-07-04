@@ -183,6 +183,39 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
   const reviewsNeeded = assignment.reviews_per_submission;
   const reviewsCompleted = myReviewsGiven.filter(r => r.status === 'completed').length;
 
+  // Distribution normally runs when someone submits or completes a review.
+  // If that student closed the browser before it finished, tasks stay stuck
+  // until someone hits refresh. Run it once per page load, but only when this
+  // student is actually missing a task, so idle page opens stay cheap.
+  const distributionAttempted = useRef(false);
+  useEffect(() => {
+    if (isTestMode || distributionAttempted.current) return;
+    if (!submissions || !reviews) return;
+    if (assignment.allowReviews === false || !canReview || !isSubmitted) return;
+
+    let missingTask;
+    if (isTeacherMode) {
+      const hasPending = myReviewsGiven.some(r => r.status !== 'completed');
+      const myReviewedIds = myReviewsGiven.map(r => r.submissionId);
+      const availableText = submissions.some(s =>
+        s.isTeacherText &&
+        !myReviewedIds.includes(s.id) &&
+        !(s.ownerEmails || []).includes(myEmail) &&
+        (s.assignedCount || 0) < assignment.reviews_per_submission
+      );
+      missingTask = !hasPending && availableText;
+    } else {
+      const target = Math.min(reviewsCompleted + 1, reviewsNeeded);
+      missingTask = myReviewsGiven.length < target;
+    }
+
+    if (missingTask) {
+      distributionAttempted.current = true;
+      (isTeacherMode ? runTeacherDistribution(assignment.id) : runDistribution(assignment.id))
+        .catch(err => console.error('Distribution catch-up error:', err));
+    }
+  }, [submissions, reviews, isTestMode, isTeacherMode, canReview, isSubmitted, assignment, myEmail, myReviewsGiven, reviewsCompleted, reviewsNeeded]);
+
   const formatTime = (ms) => {
     const totalSeconds = Math.floor(ms / 1000);
     const mins = Math.floor(totalSeconds / 60);
@@ -278,6 +311,7 @@ export default function StudentAssignmentView({ assignment, submissions, reviews
         studentName: user.displayName,
         content: { text: currentText },
         status: 'submitted',
+        submittedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       }, { merge: true });
 

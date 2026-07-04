@@ -123,6 +123,8 @@ const resources = {
         select_target_class: 'Vyberte cílovou třídu',
         status_expected: 'Očekáváno',
         status_submitted: 'Odevzdáno',
+        status_empty: 'Odevzdáno prázdné',
+        status_empty_desc: 'Práce byla odevzdána bez obsahu (např. vypršel časový limit) a nezařazuje se do hodnocení.',
         original_text: 'Originální text práce',
 
         // Settings/Builder
@@ -383,6 +385,8 @@ const resources = {
         select_target_class: 'Select target class',
         status_expected: 'Expected',
         status_submitted: 'Submitted',
+        status_empty: 'Submitted empty',
+        status_empty_desc: 'The work was submitted without content (e.g. the time limit ran out) and is excluded from peer review.',
         original_text: 'Original submission text',
 
         // Settings/Builder

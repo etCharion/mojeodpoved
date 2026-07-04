@@ -8,7 +8,7 @@ import StudentAssignmentView from '../student/StudentAssignmentView';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RubricDisplay from '../../components/RubricDisplay';
 import { RichTextRenderer, RichTextInput } from '../../components/RichTextEditor';
-import { runDistribution, runTeacherDistribution } from '../../lib/logic';
+import { runDistribution, runTeacherDistribution, hasContent } from '../../lib/logic';
 import { useTranslation } from 'react-i18next';
 
 function TextEditorModal({ initial, classStudentEmails, onClose, onSave, t }) {
@@ -929,6 +929,8 @@ export default function AssignmentDetails() {
                         <div className="flex items-center justify-between">
                           {isExpected ? (
                             <span className="text-sm font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded">{t('assignment.status_expected')}</span>
+                          ) : !hasContent(sub) ? (
+                            <span className="text-sm font-medium text-red-600 bg-red-50 px-2 py-1 rounded" title={t('assignment.status_empty_desc')}>{t('assignment.status_empty')}</span>
                           ) : (
                             <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">{t('assignment.status_submitted')}</span>
                           )}
