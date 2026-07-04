@@ -394,8 +394,8 @@ export default function ClassDetails() {
         const data = docSnapshot.data();
         setClassInfo({ id: docSnapshot.id, ...data });
 
-        // Generate joinCode if missing
-        if (!data.joinCode) {
+        // Generate joinCode if missing — only the class teacher may write it
+        if (!data.joinCode && data.teacherId === user?.uid) {
           const newCode = Math.floor(100000 + Math.random() * 900000).toString();
           await updateDoc(doc(db, 'classes', classId), {
             joinCode: newCode
@@ -414,7 +414,7 @@ export default function ClassDetails() {
       unsubClass();
       unsubAssignments();
     };
-  }, [classId]);
+  }, [classId, user?.uid]);
 
   const handleAddStudent = async (e) => {
     e.preventDefault();

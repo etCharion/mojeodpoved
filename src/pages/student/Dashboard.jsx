@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, getDocs, limit } from 'firebase/firestore';
 import * as Icons from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -90,6 +90,9 @@ export default function StudentDashboard() {
   const [classOrder, setClassOrder] = useState([]);
   const [pendingClasses, setPendingClasses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinError, setJoinError] = useState(false);
+  const [joinLoading, setJoinLoading] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -143,6 +146,29 @@ export default function StudentDashboard() {
     };
   }, [user, navigate, classOrder.length]);
 
+  const handleJoinByCode = async (e) => {
+    e.preventDefault();
+    const code = joinCode.replace(/\s+/g, '');
+    if (!code) return;
+
+    setJoinLoading(true);
+    setJoinError(false);
+    try {
+      const q = query(collection(db, 'classes'), where('joinCode', '==', code), limit(1));
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        setJoinError(true);
+      } else {
+        navigate(`/join/${snap.docs[0].id}`);
+      }
+    } catch (err) {
+      console.error('Join by code error:', err);
+      setJoinError(true);
+    } finally {
+      setJoinLoading(false);
+    }
+  };
+
   const handleDragEnd = async (event) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
@@ -185,6 +211,30 @@ export default function StudentDashboard() {
           <h1 className="text-3xl font-bold text-gray-900">{t('dashboard.student_title')}</h1>
           <p className="text-gray-500">{t('dashboard.view_classes')}</p>
         </div>
+        <form onSubmit={handleJoinByCode} className="flex flex-col gap-1">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength="7"
+              value={joinCode}
+              onChange={(e) => { setJoinCode(e.target.value); setJoinError(false); }}
+              placeholder={t('dashboard.enter_code')}
+              className="w-44 px-4 py-2 border rounded-lg font-mono tracking-widest text-center outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              type="submit"
+              disabled={joinLoading || !joinCode.trim()}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors disabled:bg-gray-300"
+            >
+              {joinLoading ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.LogIn className="w-4 h-4" />}
+              {t('dashboard.join_submit')}
+            </button>
+          </div>
+          {joinError && (
+            <p className="text-xs text-red-600 font-medium">{t('dashboard.invalid_code')}</p>
+          )}
+        </form>
       </div>
 
       <section className="space-y-4">
